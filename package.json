@@ -1,0 +1,32 @@
+{
+  "name": "raspizulassungstermine",
+  "version": "1.0.0",
+  "description": "Raspberry Pi Terminüberwachung für KFZ-Zulassung Lahn-Dill-Kreis",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "raspberry-pi",
+    "terminueberwachung",
+    "puppeteer",
+    "kfz-zulassung",
+    "automation"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.0",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "morgan": "^1.10.0",
+    "node-cron": "^4.2.1",
+    "node-telegram-bot-api": "^0.66.0",
+    "nodemailer": "^7.0.5",
+    "puppeteer": "^24.14.0",
+    "winston": "^3.17.0"
+  }
+}

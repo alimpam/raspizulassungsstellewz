@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terminüberwachung - KFZ Zulassung</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            border: 1px solid #e9ecef;
+        }
+
+        .card h2 {
+            color: #007bff;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .status-active { background: #28a745; }
+        .status-inactive { background: #dc3545; }
+        .status-warning { background: #ffc107; }
+
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        .btn:hover {
+            background: #0056b3;
+        }
+
+        .btn-success {
+            background: #28a745;
+        }
+
+        .btn-success:hover {
+            background: #1e7e34;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .input-group input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .date-list {
+            list-style: none;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .date-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .date-item:last-child {
+            border-bottom: none;
+        }
+
+        .date-available {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+        }
+
+        .notification-status {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .notification-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px;
+            background: white;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+
+        .log-container {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .footer {
+            background: #f8f9fa;
+            text-align: center;
+            padding: 20px;
+            color: #6c757d;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .alert {
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            border: 1px solid transparent;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+
+        .alert-danger {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+
+        .alert-warning {
+            background: #fff3cd;
+            border-color: #ffeaa7;
+            color: #856404;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            border: 1px solid #e9ecef;
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        .stat-label {
+            color: #6c757d;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚗 Terminüberwachung</h1>
+            <p>KFZ-Zulassung Lahn-Dill-Kreis</p>
+        </div>
+
+        <div class="content">
+            <div id="alerts"></div>
+
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-number" id="watchedCount">0</div>
+                    <div class="stat-label">Überwachte Termine</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="availableCount">0</div>
+                    <div class="stat-label">Verfügbare Termine</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="lastCheck">--</div>
+                    <div class="stat-label">Letzte Prüfung</div>
+                </div>
+            </div>
+
+            <div class="grid">
+                <div class="card">
+                    <h2>📅 Terminverwaltung</h2>
+                    <div class="input-group">
+                        <input type="date" id="dateInput" placeholder="Datum auswählen">
+                        <button class="btn" onclick="addDate()">Hinzufügen</button>
+                    </div>
+                    <ul class="date-list" id="dateList"></ul>
+                    <button class="btn btn-success" onclick="checkNow()">
+                        <span id="checkBtnText">Jetzt prüfen</span>
+                    </button>
+                </div>
+
+                <div class="card">
+                    <h2>🔄 Monitoring-Status</h2>
+                    <div class="status-indicator">
+                        <div class="status-dot" id="monitoringStatus"></div>
+                        <span id="monitoringText">Lädt...</span>
+                    </div>
+                    <div class="status-indicator">
+                        <div class="status-dot" id="systemStatus"></div>
+                        <span id="systemText">System-Status</span>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <button class="btn" onclick="toggleMonitoring()">
+                            <span id="toggleText">Monitoring steuern</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>📢 Benachrichtigungen</h2>
+                    <div class="notification-status" id="notificationStatus"></div>
+                    <button class="btn" onclick="testNotification()">
+                        Test-Benachrichtigung senden
+                    </button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>📊 System-Logs</h2>
+                <div class="log-container" id="logContainer">
+                    Logs werden geladen...
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Raspberry Pi Terminüberwachung - Entwickelt für KFZ-Zulassung Lahn-Dill-Kreis</p>
+        </div>
+    </div>
+
+    <script>
+        let systemData = {};
+        let logMessages = [];
+
+        // Initialisierung
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSystemStatus();
+            loadDates();
+            loadNotificationStatus();
+            
+            // Auto-Update alle 30 Sekunden
+            setInterval(loadSystemStatus, 30000);
+            setInterval(loadDates, 30000);
+        });
+
+        async function loadSystemStatus() {
+            try {
+                const response = await fetch('/api/status');
+                systemData = await response.json();
+                
+                updateStatusUI();
+            } catch (error) {
+                console.error('Fehler beim Laden des Status:', error);
+                showAlert('Fehler beim Laden des System-Status', 'danger');
+            }
+        }
+
+        function updateStatusUI() {
+            // Monitoring-Status
+            const monitoringStatus = document.getElementById('monitoringStatus');
+            const monitoringText = document.getElementById('monitoringText');
+            
+            if (systemData.monitoring && systemData.monitoring.isRunning) {
+                monitoringStatus.className = 'status-dot status-active';
+                monitoringText.textContent = 'Monitoring aktiv';
+            } else {
+                monitoringStatus.className = 'status-dot status-inactive';
+                monitoringText.textContent = 'Monitoring inaktiv';
+            }
+
+            // System-Status
+            const systemStatus = document.getElementById('systemStatus');
+            const systemText = document.getElementById('systemText');
+            
+            systemStatus.className = 'status-dot status-active';
+            systemText.textContent = `Uptime: ${Math.floor(systemData.system.uptime / 3600)}h`;
+
+            // Statistiken
+            document.getElementById('watchedCount').textContent = 
+                systemData.monitoring?.watchedDates?.length || 0;
+            document.getElementById('availableCount').textContent = 
+                systemData.monitoring?.foundAppointments?.length || 0;
+            
+            if (systemData.monitoring?.lastCheck) {
+                const lastCheck = new Date(systemData.monitoring.lastCheck);
+                document.getElementById('lastCheck').textContent = 
+                    lastCheck.toLocaleTimeString('de-DE');
+            }
+        }
+
+        async function loadDates() {
+            try {
+                const response = await fetch('/api/dates');
+                const dates = await response.json();
+                
+                const dateList = document.getElementById('dateList');
+                dateList.innerHTML = '';
+                
+                dates.forEach(dateInfo => {
+                    const li = document.createElement('li');
+                    li.className = 'date-item';
+                    if (dateInfo.isAvailable) {
+                        li.classList.add('date-available');
+                    }
+                    
+                    li.innerHTML = `
+                        <span>${dateInfo.germanDate} ${dateInfo.isAvailable ? '✅' : '⏳'}</span>
+                        <button class="btn btn-danger" onclick="removeDate('${dateInfo.date}')">
+                            Entfernen
+                        </button>
+                    `;
+                    
+                    dateList.appendChild(li);
+                });
+            } catch (error) {
+                console.error('Fehler beim Laden der Termine:', error);
+                showAlert('Fehler beim Laden der Termine', 'danger');
+            }
+        }
+
+        async function loadNotificationStatus() {
+            try {
+                const response = await fetch('/api/notifications/status');
+                const status = await response.json();
+                
+                const container = document.getElementById('notificationStatus');
+                container.innerHTML = '';
+                
+                Object.entries(status).forEach(([service, info]) => {
+                    const item = document.createElement('div');
+                    item.className = 'notification-item';
+                    
+                    const statusDot = info.configured ? 'status-active' : 'status-inactive';
+                    const statusText = info.configured ? 'Konfiguriert' : 'Nicht konfiguriert';
+                    
+                    item.innerHTML = `
+                        <span>${service.charAt(0).toUpperCase() + service.slice(1)}</span>
+                        <span class="status-indicator">
+                            <div class="status-dot ${statusDot}"></div>
+                            ${statusText}
+                        </span>
+                    `;
+                    
+                    container.appendChild(item);
+                });
+            } catch (error) {
+                console.error('Fehler beim Laden der Benachrichtigungsstatus:', error);
+            }
+        }
+
+        async function addDate() {
+            const dateInput = document.getElementById('dateInput');
+            const dateValue = dateInput.value;
+            
+            if (!dateValue) {
+                showAlert('Bitte wählen Sie ein Datum aus', 'warning');
+                return;
+            }
+            
+            // Datum von YYYY-MM-DD zu YYYY/MM/DD konvertieren
+            const formattedDate = dateValue.replace(/-/g, '/');
+            
+            try {
+                const response = await fetch('/api/dates', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ date: formattedDate })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('Termin erfolgreich hinzugefügt', 'success');
+                    dateInput.value = '';
+                    loadDates();
+                } else {
+                    showAlert(result.message, 'danger');
+                }
+            } catch (error) {
+                console.error('Fehler beim Hinzufügen des Termins:', error);
+                showAlert('Fehler beim Hinzufügen des Termins', 'danger');
+            }
+        }
+
+        async function removeDate(date) {
+            try {
+                const response = await fetch(`/api/dates/${date}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('Termin erfolgreich entfernt', 'success');
+                    loadDates();
+                } else {
+                    showAlert(result.message, 'danger');
+                }
+            } catch (error) {
+                console.error('Fehler beim Entfernen des Termins:', error);
+                showAlert('Fehler beim Entfernen des Termins', 'danger');
+            }
+        }
+
+        async function checkNow() {
+            const button = document.getElementById('checkBtnText');
+            const originalText = button.textContent;
+            
+            button.innerHTML = '<div class="loading"></div> Prüfe...';
+            
+            try {
+                const response = await fetch('/api/check', {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('Terminprüfung erfolgreich durchgeführt', 'success');
+                    loadDates();
+                    loadSystemStatus();
+                } else {
+                    showAlert(result.message, 'danger');
+                }
+            } catch (error) {
+                console.error('Fehler bei der Terminprüfung:', error);
+                showAlert('Fehler bei der Terminprüfung', 'danger');
+            } finally {
+                button.textContent = originalText;
+            }
+        }
+
+        async function testNotification() {
+            try {
+                const response = await fetch('/api/test-notification', {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('Test-Benachrichtigung gesendet', 'success');
+                } else {
+                    showAlert(result.message, 'danger');
+                }
+            } catch (error) {
+                console.error('Fehler beim Senden der Test-Benachrichtigung:', error);
+                showAlert('Fehler beim Senden der Test-Benachrichtigung', 'danger');
+            }
+        }
+
+        function showAlert(message, type) {
+            const alertsContainer = document.getElementById('alerts');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            
+            alertsContainer.appendChild(alert);
+            
+            // Nach 5 Sekunden entfernen
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.parentNode.removeChild(alert);
+                }
+            }, 5000);
+        }
+
+        function toggleMonitoring() {
+            showAlert('Monitoring-Steuerung wird implementiert', 'warning');
+        }
+    </script>
+</body>
+</html>
