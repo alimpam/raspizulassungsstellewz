@@ -34,7 +34,20 @@ class AppointmentMonitor extends EventEmitter {
                     '--disable-gpu',
                     '--window-size=1920,1080',
                     '--lang=de-DE',
-                    '--accept-lang=de-DE,de;q=0.9'
+                    '--accept-lang=de-DE,de;q=0.9',
+                    '--disable-web-security',
+                    '--disable-features=TranslateUI',
+                    '--disable-ipc-flooding-protection',
+                    '--disable-background-timer-throttling',
+                    '--disable-backgrounding-occluded-windows',
+                    '--disable-renderer-backgrounding',
+                    '--disable-field-trial-config',
+                    '--disable-back-forward-cache',
+                    '--disable-blink-features=AutomationControlled',
+                    '--no-first-run',
+                    '--no-default-browser-check',
+                    '--no-zygote',
+                    '--single-process'
                 ]
             });
 
@@ -74,12 +87,15 @@ class AppointmentMonitor extends EventEmitter {
             const selectedServices = this.configService.getSelectedServices();
             const serviceMapping = this.configService.getServiceMapping();
 
-            // Seite laden
+            // Seite laden - weniger restriktive Wartezeit
             logger.info(`🌐 Lade Seite: ${this.targetUrl}`);
             await this.page.goto(this.targetUrl, { 
-                waitUntil: 'networkidle0',
-                timeout: puppeteerOptions.timeout
+                waitUntil: 'domcontentloaded',
+                timeout: 30000
             });
+            
+            // Warte zusätzlich kurz auf dynamische Inhalte
+            await new Promise(resolve => setTimeout(resolve, 2000));
 
             // Warten auf das Formular
             logger.info('⏳ Warte auf Formular...');
@@ -156,12 +172,15 @@ class AppointmentMonitor extends EventEmitter {
             const selectedServices = this.configService.getSelectedServices();
             const serviceMapping = this.configService.getServiceMapping();
 
-            // Seite laden
+            // Seite laden - weniger restriktive Wartezeit
             logger.info(`🌐 Lade Seite: ${this.targetUrl}`);
             await this.page.goto(this.targetUrl, { 
-                waitUntil: 'networkidle0',
-                timeout: puppeteerOptions.timeout
+                waitUntil: 'domcontentloaded',
+                timeout: 30000
             });
+            
+            // Warte zusätzlich kurz auf dynamische Inhalte
+            await new Promise(resolve => setTimeout(resolve, 2000));
 
             // Screenshot nach dem Laden
             await this.debugScreenshot('initial_load', 'Seite initial geladen');
@@ -292,7 +311,7 @@ class AppointmentMonitor extends EventEmitter {
                 return [];
             }
 
-            logger.info(`🔍 Prüfe ${monitoredDates.length} überwachte Termine...`);
+            logger.info(`🔍 Prüfe ${monitoredDates.length} überwachte Termine: ${monitoredDates.join(', ')}`);
             
             // Optional: Seite refreshen alle paar Checks (wie im Tampermonkey-Script)
             if (this.checkCount && this.checkCount % 3 === 0) {
@@ -303,20 +322,37 @@ class AppointmentMonitor extends EventEmitter {
                 });
             }
             
+            // Sortiere Termine nach Datum für effiziente Navigation
+            const sortedDates = monitoredDates.sort();
+            logger.info(`📋 Sortierte Termine: ${sortedDates.join(', ')}`);
+            
             const results = [];
-            for (const dateStr of monitoredDates) {
+            for (let i = 0; i < sortedDates.length; i++) {
+                const dateStr = sortedDates[i];
+                logger.info(`🔍 Prüfe Termin ${i + 1}/${sortedDates.length}: ${dateStr}`);
+                
                 const result = await this.checkSingleDate(dateStr);
                 results.push(result);
                 
-                // Kurze Pause zwischen Terminprüfungen
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                logger.info(`✅ Ergebnis für ${dateStr}: ${result.available ? 'VERFÜGBAR' : 'nicht verfügbar'}`);
+                
+                // Längere Pause zwischen Terminprüfungen für bessere Stabilität
+                if (i < sortedDates.length - 1) {
+                    logger.info('⏳ Warte 2 Sekunden vor nächster Terminprüfung...');
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
             }
 
             this.checkCount = (this.checkCount || 0) + 1;
             this.lastCheckTime = new Date();
             
             const availableCount = results.filter(r => r.available).length;
+            const availableDates = results.filter(r => r.available).map(r => r.date);
+            
             logger.info(`✅ Terminprüfung abgeschlossen: ${availableCount}/${results.length} Termine verfügbar`);
+            if (availableDates.length > 0) {
+                logger.info(`🎯 Verfügbare Termine: ${availableDates.join(', ')}`);
+            }
 
             return results;
             
@@ -458,10 +494,24 @@ class AppointmentMonitor extends EventEmitter {
             const [yyyy, mm, dd] = dateStr.split('/');
             const germanDate = `${dd}.${mm}.${yyyy}`;
             
-            logger.info(`🔍 Prüfe Termin: ${germanDate}`);
+            logger.info(`🔍 Prüfe Termin: ${germanDate} (${dateStr})`);
+            
+            // Debug: Aktueller Monat vor Navigation
+            const currentMonthBefore = await this.page.evaluate(() => {
+                const caption = document.querySelector('.dx-calendar-caption-button .dx-button-text');
+                return caption ? caption.textContent.trim() : 'Unbekannt';
+            });
+            logger.info(`📅 Aktueller Monat vor Navigation: ${currentMonthBefore}`);
 
             // Zum gewünschten Monat navigieren
             await this.navigateToMonth(yyyy, mm);
+            
+            // Debug: Aktueller Monat nach Navigation
+            const currentMonthAfter = await this.page.evaluate(() => {
+                const caption = document.querySelector('.dx-calendar-caption-button .dx-button-text');
+                return caption ? caption.textContent.trim() : 'Unbekannt';
+            });
+            logger.info(`📅 Aktueller Monat nach Navigation: ${currentMonthAfter}`);
 
             // Warten bis der Kalender geladen ist
             await this.page.waitForSelector('td[data-value]', { timeout: 10000 });
@@ -473,39 +523,78 @@ class AppointmentMonitor extends EventEmitter {
                 return { date: dateStr, available: false, reason: 'Nicht im Kalender gefunden' };
             }
 
+            logger.info(`✅ Termin-Zelle für ${germanDate} gefunden`);
+
             // Detaillierte Analyse der Zelle wie im Tampermonkey-Script
             const cellInfo = await cell.evaluate(el => {
                 const classes = el.className;
-                const isGreen = classes.includes('bg-success');
-                const isEnabled = !classes.includes('disabled-date');
-                const isSelectable = !classes.includes('dx-calendar-other-month');
+                const computedStyle = window.getComputedStyle(el);
+                const backgroundColor = computedStyle.backgroundColor;
+                const color = computedStyle.color;
                 
-                // Zusätzliche Checks für verfügbare Termine
-                const hasAvailableClass = classes.includes('dx-calendar-cell') && 
-                                        !classes.includes('dx-calendar-empty-cell');
+                // Verschiedene Verfügbarkeitsindikatoren prüfen
+                const isGreen = classes.includes('bg-success') || 
+                               backgroundColor.includes('rgb(40, 167, 69)') ||
+                               backgroundColor.includes('green');
                 
-                // Prüfe ob die Zelle klickbar ist
+                const isDisabled = classes.includes('disabled-date') ||
+                                 classes.includes('dx-calendar-cell-disabled') ||
+                                 classes.includes('dx-state-disabled') ||
+                                 el.disabled;
+                
+                const isOtherMonth = classes.includes('dx-calendar-other-month') ||
+                                   classes.includes('dx-calendar-other-view');
+                
+                const isSelectable = classes.includes('dx-calendar-cell') &&
+                                   !classes.includes('dx-calendar-empty-cell');
+                
+                // Prüfe auf spezielle Termin-Indikatoren
+                const hasAppointmentIndicator = classes.includes('appointment-available') ||
+                                              classes.includes('available') ||
+                                              classes.includes('bookable') ||
+                                              el.querySelector('.appointment-indicator');
+                
+                // Prüfe Textinhalt auf Terminhinweise
+                const textContent = el.textContent.trim();
+                const hasTimeText = textContent.includes(':') || 
+                                  textContent.match(/\d{1,2}:\d{2}/) ||
+                                  textContent.includes('Termin');
+                
+                // Clickability prüfen
                 const isClickable = !el.disabled && 
-                                  el.style.pointerEvents !== 'none' &&
-                                  !classes.includes('dx-calendar-cell-disabled');
+                                  computedStyle.pointerEvents !== 'none' &&
+                                  !isDisabled;
 
                 return {
                     classes,
+                    backgroundColor,
+                    color,
                     isGreen,
-                    isEnabled,
+                    isDisabled,
+                    isOtherMonth,
                     isSelectable,
-                    hasAvailableClass,
+                    hasAppointmentIndicator,
+                    hasTimeText,
                     isClickable,
-                    textContent: el.textContent.trim(),
-                    style: el.style.cssText
+                    textContent,
+                    style: el.style.cssText,
+                    computedStyle: {
+                        backgroundColor,
+                        color,
+                        pointerEvents: computedStyle.pointerEvents
+                    }
                 };
             });
 
-            // Verbesserte Verfügbarkeitsprüfung
-            const isAvailable = cellInfo.isGreen && 
-                              cellInfo.isEnabled && 
-                              cellInfo.isSelectable && 
-                              cellInfo.hasAvailableClass && 
+            // Verbesserte Verfügbarkeitsprüfung - weniger restriktiv
+            // Ein Termin ist verfügbar wenn:
+            // 1. Er ist grün ODER hat Terminhinweise
+            // 2. Er ist nicht deaktiviert
+            // 3. Er ist nicht aus einem anderen Monat
+            // 4. Er ist grundsätzlich klickbar
+            const isAvailable = (cellInfo.isGreen || cellInfo.hasAppointmentIndicator || cellInfo.hasTimeText) &&
+                              !cellInfo.isDisabled &&
+                              !cellInfo.isOtherMonth &&
                               cellInfo.isClickable;
 
             const result = {
@@ -516,6 +605,23 @@ class AppointmentMonitor extends EventEmitter {
                 details: cellInfo,
                 timestamp: new Date().toISOString()
             };
+
+            // Detailliertes Logging für Debugging
+            logger.info(`🔍 Termin-Details für ${germanDate}:`, {
+                available: isAvailable,
+                isGreen: cellInfo.isGreen,
+                hasAppointmentIndicator: cellInfo.hasAppointmentIndicator,
+                hasTimeText: cellInfo.hasTimeText,
+                isDisabled: cellInfo.isDisabled,
+                isOtherMonth: cellInfo.isOtherMonth,
+                isClickable: cellInfo.isClickable,
+                classes: cellInfo.classes,
+                textContent: cellInfo.textContent,
+                backgroundColor: cellInfo.backgroundColor
+            });
+
+            // Debug-Screenshot für die Terminprüfung
+            await this.createScreenshot(`appointment_check_${dateStr.replace(/\//g, '_')}`, `Terminprüfung für ${germanDate}`);
 
             if (result.available && !this.foundAppointments.has(dateStr)) {
                 this.foundAppointments.add(dateStr);
@@ -549,6 +655,8 @@ class AppointmentMonitor extends EventEmitter {
         try {
             const maxNavigations = 24; // Maximal 2 Jahre navigieren
             let navigations = 0;
+            
+            logger.info(`🎯 Navigiere zu Monat: ${targetMonth}/${targetYear}`);
 
             while (navigations < maxNavigations) {
                 // Aktuellen Monat ermitteln (wie im Tampermonkey-Script)
@@ -567,7 +675,7 @@ class AppointmentMonitor extends EventEmitter {
                     
                     return {
                         year: jahr,
-                        month: monthMap[monat],
+                        month: monthMap[monat] || monat,
                         text: text
                     };
                 });
@@ -594,22 +702,43 @@ class AppointmentMonitor extends EventEmitter {
                 if (aktJahr > zielJ || (aktJahr === zielJ && aktMonat > zielM)) {
                     // Zurück navigieren
                     logger.info(`⬅️ Navigiere einen Monat zurück von ${currentMonth.text}`);
-                    await this.page.click('.dx-calendar-navigator-previous-month');
+                    const prevButton = await this.page.$('.dx-calendar-navigator-previous-month');
+                    if (prevButton) {
+                        await prevButton.click();
+                    } else {
+                        logger.error('❌ Vorheriger Monat Button nicht gefunden');
+                        throw new Error('Vorheriger Monat Button nicht gefunden');
+                    }
                 } else if (aktJahr < zielJ || (aktJahr === zielJ && aktMonat < zielM)) {
                     // Vorwärts navigieren
                     logger.info(`➡️ Navigiere einen Monat vor von ${currentMonth.text}`);
-                    await this.page.click('.dx-calendar-navigator-next-month');
+                    const nextButton = await this.page.$('.dx-calendar-navigator-next-month');
+                    if (nextButton) {
+                        await nextButton.click();
+                    } else {
+                        logger.error('❌ Nächster Monat Button nicht gefunden');
+                        throw new Error('Nächster Monat Button nicht gefunden');
+                    }
                 }
 
                 // Warten bis Navigation abgeschlossen (wie im Tampermonkey-Script)
                 await new Promise(resolve => setTimeout(resolve, 800));
+                
+                // Warten bis der neue Monat geladen ist
+                await this.page.waitForSelector('.dx-calendar-caption-button .dx-button-text', {
+                    timeout: 5000
+                });
+                
                 navigations++;
+                
+                // Debug: Screenshot nach Navigation
+                await this.createScreenshot(`navigation_step_${navigations}_${targetMonth}_${targetYear}`, `Navigation Schritt ${navigations} zu ${targetMonth}/${targetYear}`);
             }
 
-            throw new Error(`Maximale Navigationen (${maxNavigations}) erreicht`);
+            throw new Error(`Maximale Navigationen (${maxNavigations}) erreicht für Monat ${targetMonth}/${targetYear}`);
 
         } catch (error) {
-            logger.error('❌ Fehler bei der Monatsnavigation:', error);
+            logger.error(`❌ Fehler bei der Monatsnavigation zu ${targetMonth}/${targetYear}:`, error);
             throw error;
         }
     }
@@ -671,6 +800,19 @@ class AppointmentMonitor extends EventEmitter {
     }
 
     // Debug-Funktion für Screenshots
+    async createScreenshot(name, description) {
+        try {
+            if (this.page) {
+                const screenshotPath = `debug_${name}_${Date.now()}.png`;
+                await this.page.screenshot({ path: screenshotPath, fullPage: true });
+                logger.info(`📸 Screenshot gespeichert: ${screenshotPath} - ${description}`);
+                return screenshotPath;
+            }
+        } catch (error) {
+            logger.warn(`⚠️ Fehler beim Erstellen des Screenshots ${name}:`, error);
+        }
+    }
+
     async debugScreenshot(name, description) {
         try {
             const filename = `debug_${name}_${Date.now()}.png`;
@@ -821,6 +963,10 @@ class AppointmentMonitor extends EventEmitter {
         const timeString = `${intervalMinutes}:${intervalSeconds.toString().padStart(2, '0')}`;
         logger.info(`🔄 Starte kontinuierliche Überwachung (alle ${timeString} Min)`);
 
+        // Status sofort auf "aktiv" setzen für sofortiges UI-Feedback
+        this.monitoringInterval = 'initializing'; // Temporärer Wert
+        this.isMonitoringActive = true;
+        
         try {
             // Synchronisation mit Config beim Start
             this.syncWithConfig();
@@ -868,6 +1014,9 @@ class AppointmentMonitor extends EventEmitter {
             }, intervalMs);
             
         } catch (error) {
+            // Bei Fehler Status zurücksetzen
+            this.monitoringInterval = null;
+            this.isMonitoringActive = false;
             logger.error('❌ Fehler beim Starten der kontinuierlichen Überwachung:', error);
             throw error;
         }
@@ -876,8 +1025,11 @@ class AppointmentMonitor extends EventEmitter {
     // Kontinuierliche Überwachung stoppen
     stopContinuousMonitoring() {
         if (this.monitoringInterval) {
-            clearInterval(this.monitoringInterval);
+            if (this.monitoringInterval !== 'initializing') {
+                clearInterval(this.monitoringInterval);
+            }
             this.monitoringInterval = null;
+            this.isMonitoringActive = false;
             
             // Lösche die gespeicherten Intervall-Parameter
             this.monitoringIntervalMinutes = undefined;
@@ -895,8 +1047,12 @@ class AppointmentMonitor extends EventEmitter {
         // Synchronisiere foundAppointments vor Statusabfrage
         this.syncFoundAppointments();
         
+        const isActive = !!this.monitoringInterval && this.monitoringInterval !== null;
+        const isInitializing = this.monitoringInterval === 'initializing';
+        
         return {
-            isActive: !!this.monitoringInterval,
+            isActive: isActive,
+            isInitializing: isInitializing,
             isCurrentlyChecking: this.isMonitoringActive,
             lastCheckTime: this.lastCheckTime,
             consecutiveErrors: this.consecutiveErrors || 0,

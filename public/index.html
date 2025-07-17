@@ -590,6 +590,15 @@
                 
                 if (monitoring && monitoring.isActive) {
                     monitoringStatus.className = 'status-dot status-active';
+                    
+                    // Behandle Initialisierungsstatus
+                    if (monitoring.isInitializing) {
+                        monitoringStatus.className = 'status-dot status-warning';
+                        monitoringText.innerHTML = `Monitoring wird initialisiert...<br>
+                            <small>Browser wird gestartet und Seite geladen</small>`;
+                        return; // Früher Rücksprung für Initialisierung
+                    }
+                    
                     const checkingText = monitoring.isCurrentlyChecking ? ' (prüft gerade...)' : '';
                     const lastCheck = monitoring.lastCheckTime ? 
                         new Date(monitoring.lastCheckTime).toLocaleTimeString() : 'Noch kein Check';
