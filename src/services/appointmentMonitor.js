@@ -361,6 +361,9 @@ class AppointmentMonitor extends EventEmitter {
 
             logger.info(`🔍 Prüfe ${monitoredDates.length} überwachte Termine: ${monitoredDates.join(', ')}`);
             
+            // Stelle sicher, dass wir in der Kalenderansicht sind
+            await this.ensureCalendarView();
+            
             // Optional: Seite refreshen alle paar Checks (wie im Tampermonkey-Script)
             if (this.checkCount && this.checkCount % 3 === 0) {
                 logger.info('🔄 Refreshe Seite für bessere Stabilität...');
@@ -669,55 +672,36 @@ class AppointmentMonitor extends EventEmitter {
                               cellInfo.isClickable;
 
             let availableTimeSlots = [];
+            let timeSlotsCount = 0;
             
-            // Wenn der Termin verfügbar ist, klicke darauf und prüfe die Zeitslots
+            // Wenn der Termin verfügbar ist, extrahiere Zeitslot-Informationen direkt aus dem Kalender
             if (isAvailable) {
-                logger.info(`🔍 Termin ${germanDate} ist verfügbar - prüfe Zeitslots...`);
-                
+                logger.info(`🔍 Termin ${germanDate} ist verfügbar - extrahiere Zeitslots...`);
                 try {
-                    // Auf die Termin-Zelle klicken
+                    // Klicke auf die Termin-Zelle, damit die Wochenansicht rechts aktualisiert wird
                     await cell.click();
-                    
-                    // Warten auf die Tagesansicht
-                    await this.page.waitForSelector('table.table-sm', { timeout: 10000 });
-                    
-                    // Verfügbare Zeitslots extrahieren (btn-success Buttons)
+                    // Warte auf die Wochen-/Zeitslot-Ansicht (z.B. table.table-sm oder .btn-time-selector)
+                    await this.page.waitForSelector('.btn-time-selector, table.table-sm', { timeout: 10000 });
+                    // Extrahiere Zeitslots direkt aus der Wochenansicht
                     availableTimeSlots = await this.page.evaluate(() => {
-                        const successButtons = document.querySelectorAll('.btn-time-selector.btn-success');
-                        const timeSlots = [];
-                        
-                        successButtons.forEach(button => {
-                            const value = button.getAttribute('value');
-                            const text = button.textContent.trim();
-                            
+                        const slots = [];
+                        const buttons = document.querySelectorAll('.btn-time-selector.btn-success');
+                        buttons.forEach(btn => {
+                            const value = btn.getAttribute('value');
+                            const text = btn.textContent.trim();
                             if (value && text) {
-                                timeSlots.push({
-                                    time: text,
-                                    value: value,
-                                    datetime: value
-                                });
+                                slots.push({ time: text, value, datetime: value });
                             }
                         });
-                        
-                        return timeSlots;
+                        return slots;
                     });
-                    
-                    logger.info(`🎯 Gefundene Zeitslots für ${germanDate}: ${availableTimeSlots.length}`, 
-                        availableTimeSlots.map(slot => slot.time));
-                    
-                    // Zurück zur Kalenderansicht navigieren
-                    await this.page.goBack();
-                    await this.page.waitForSelector('.dx-calendar-caption-button .dx-button-text', { timeout: 10000 });
-                    
+                    timeSlotsCount = availableTimeSlots.length;
+                    logger.info(`🎯 Zeitslots für ${germanDate}: ${timeSlotsCount}`, availableTimeSlots.map(slot => slot.time));
+                    // KEINE NAVIGATION! Bleibe auf der Seite.
                 } catch (detailError) {
                     logger.warn(`⚠️ Konnte Zeitslots für ${germanDate} nicht extrahieren:`, detailError);
-                    // Fallback: Zurück zur Kalenderansicht wenn möglich
-                    try {
-                        await this.page.goBack();
-                        await this.page.waitForSelector('.dx-calendar-caption-button .dx-button-text', { timeout: 5000 });
-                    } catch (backError) {
-                        logger.warn('⚠️ Konnte nicht zur Kalenderansicht zurückkehren:', backError);
-                    }
+                    availableTimeSlots = [];
+                    timeSlotsCount = 0;
                 }
             }
 
@@ -1444,6 +1428,71 @@ class AppointmentMonitor extends EventEmitter {
             logger.warn('⚠️ Browser-Verbindung verloren, initialisiere komplett neu:', error);
             await this.cleanup();
             await this.initialize();
+        }
+    }
+
+    // Hilfsfunktion um sicherzustellen, dass wir in der Kalenderansicht sind
+    async ensureCalendarView() {
+        try {
+            logger.info('🔄 Stelle sicher, dass wir in der Kalenderansicht sind...');
+            
+            // Prüfe ob wir bereits in der Kalenderansicht sind
+            const isInCalendar = await this.page.evaluate(() => {
+                const selectors = [
+                    '.dx-calendar-caption-button .dx-button-text',
+                    '.dx-calendar-caption .dx-button-text',
+                    'td[data-value]'
+                ];
+                
+                for (const selector of selectors) {
+                    if (document.querySelector(selector)) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+            
+            if (isInCalendar) {
+                logger.info('✅ Bereits in der Kalenderansicht');
+                return;
+            }
+            
+            // Wenn nicht in Kalenderansicht, versuche zur Kalenderseite zu navigieren
+            logger.info('🔄 Nicht in Kalenderansicht - navigiere zurück...');
+            
+            // Versuche verschiedene Methoden zur Kalender-Navigation
+            const currentUrl = this.page.url();
+            logger.info(`📍 Aktuelle URL: ${currentUrl}`);
+            
+            // Methode 1: Zurück-Button suchen
+            const backButton = await this.page.$('a[href*="calendar"], .btn-back, .back-button, a[title*="zurück"], a[title*="Zurück"], .breadcrumb a');
+            if (backButton) {
+                logger.info('🔄 Verwende Zurück-Button');
+                await backButton.click();
+                await this.page.waitForFunction(() => {
+                    return document.querySelector('.dx-calendar-caption-button .dx-button-text') ||
+                           document.querySelector('td[data-value]');
+                }, { timeout: 10000 });
+                return;
+            }
+            
+            // Methode 2: Browser-Navigation
+            logger.info('🔄 Verwende Browser-Navigation');
+            await this.page.goBack();
+            await this.page.waitForFunction(() => {
+                return document.querySelector('.dx-calendar-caption-button .dx-button-text') ||
+                       document.querySelector('td[data-value]');
+            }, { timeout: 10000 });
+            
+        } catch (error) {
+            logger.error('❌ Fehler beim Sicherstellen der Kalenderansicht:', error);
+            // Letzter Fallback: Komplett neu initialisieren
+            logger.info('🔄 Letzter Fallback: Seite neu laden...');
+            await this.page.reload({ waitUntil: 'networkidle0' });
+            await this.page.waitForFunction(() => {
+                return document.querySelector('.dx-calendar-caption-button .dx-button-text') ||
+                       document.querySelector('td[data-value]');
+            }, { timeout: 15000 });
         }
     }
 
