@@ -445,15 +445,35 @@ router.post('/monitoring/start', async (req, res) => {
             });
         }
 
-        await monitor.startContinuousMonitoring(intervalMinutes, intervalSeconds);
-        
+        // Prüfe ob bereits läuft
+        if (monitor.isRunning()) {
+            return res.status(400).json({ 
+                error: 'Monitoring läuft bereits' 
+            });
+        }
+
+        // Sofortige Antwort mit "initializing" Status
         res.json({ 
-            message: `Kontinuierliche Überwachung gestartet (alle ${intervalMinutes}:${intervalSeconds.toString().padStart(2, '0')} Min)`,
+            message: `Kontinuierliche Überwachung wird gestartet (alle ${intervalMinutes}:${intervalSeconds.toString().padStart(2, '0')} Min)`,
             intervalMinutes,
             intervalSeconds,
             totalSeconds,
-            status: monitor.getMonitoringStatus()
+            status: {
+                isActive: true,
+                isInitializing: true,
+                message: 'Monitoring wird initialisiert...'
+            }
         });
+
+        // Monitoring asynchron starten (nicht warten)
+        setTimeout(async () => {
+            try {
+                await monitor.startContinuousMonitoring(intervalMinutes, intervalSeconds);
+            } catch (error) {
+                console.error('Fehler beim asynchronen Monitoring-Start:', error);
+            }
+        }, 100);
+        
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

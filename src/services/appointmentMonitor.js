@@ -929,20 +929,20 @@ class AppointmentMonitor extends EventEmitter {
     }
 
     isRunning() {
-        return this.isMonitoringActive;
+        return !!this.monitoringInterval;
     }
 
     async cleanup() {
         try {
-            if (this.page) {
-                await this.page.close();
-            }
-            if (this.browser) {
-                await this.browser.close();
-            }
-            logger.info('🧹 Browser-Ressourcen bereinigt');
+            // Stoppe zuerst das kontinuierliche Monitoring
+            this.stopContinuousMonitoring();
+            
+            // Bereinige Browser-Ressourcen
+            await this.cleanupBrowser();
+            
+            logger.info('🧹 Vollständige Bereinigung abgeschlossen');
         } catch (error) {
-            logger.error('❌ Fehler beim Bereinigen der Browser-Ressourcen:', error);
+            logger.error('❌ Fehler beim Bereinigen:', error);
         }
     }
 
@@ -963,8 +963,8 @@ class AppointmentMonitor extends EventEmitter {
         const timeString = `${intervalMinutes}:${intervalSeconds.toString().padStart(2, '0')}`;
         logger.info(`🔄 Starte kontinuierliche Überwachung (alle ${timeString} Min)`);
 
-        // Status sofort auf "aktiv" setzen für sofortiges UI-Feedback
-        this.monitoringInterval = 'initializing'; // Temporärer Wert
+        // Status sofort auf "initializing" setzen für sofortiges UI-Feedback
+        this.monitoringInterval = 'initializing';
         this.isMonitoringActive = true;
         
         try {
@@ -974,6 +974,9 @@ class AppointmentMonitor extends EventEmitter {
             // Einmalige Initialisierung - Browser starten und zur Terminseite navigieren
             await this.initializeForContinuousMonitoring();
             
+            // Nach der Initialisierung den Status auf "active" setzen
+            logger.info('✅ Browser-Initialisierung abgeschlossen, starte regelmäßige Überwachung');
+            
             // Sofortige erste Prüfung
             await this.checkDatesOnly();
 
@@ -982,11 +985,8 @@ class AppointmentMonitor extends EventEmitter {
                 try {
                     logger.info('🔍 Regelmäßige Terminprüfung...');
                     
-                    // Prüfe ob Browser noch aktiv ist
-                    if (!this.page || this.page.isClosed()) {
-                        logger.warn('⚠️ Browser-Session verloren, reinitialisiere...');
-                        await this.initializeForContinuousMonitoring();
-                    }
+                    // Robuste Browser-Prüfung und Wiederherstellung
+                    await this.ensureBrowserIsActive();
                     
                     // Nur die Terminprüfung durchführen
                     await this.checkDatesOnly();
@@ -1047,8 +1047,16 @@ class AppointmentMonitor extends EventEmitter {
         // Synchronisiere foundAppointments vor Statusabfrage
         this.syncFoundAppointments();
         
-        const isActive = !!this.monitoringInterval && this.monitoringInterval !== null;
         const isInitializing = this.monitoringInterval === 'initializing';
+        const isActive = !!this.monitoringInterval && this.monitoringInterval !== null;
+        
+        // Erweiterte Browser-Status-Prüfung
+        let browserActive = false;
+        try {
+            browserActive = !!(this.browser && this.page && !this.page.isClosed());
+        } catch (error) {
+            browserActive = false;
+        }
         
         return {
             isActive: isActive,
@@ -1058,7 +1066,7 @@ class AppointmentMonitor extends EventEmitter {
             consecutiveErrors: this.consecutiveErrors || 0,
             foundAppointments: Array.from(this.foundAppointments || []),
             checkCount: this.checkCount || 0,
-            browserActive: !!(this.browser && this.page && !this.page.isClosed()),
+            browserActive: browserActive,
             targetUrl: this.targetUrl,
             intervalMinutes: this.monitoringIntervalMinutes,
             intervalSeconds: this.monitoringIntervalSeconds
@@ -1071,8 +1079,12 @@ class AppointmentMonitor extends EventEmitter {
             logger.info('🔍 Sofortige Terminprüfung...');
             
             // Prüfe ob kontinuierliche Überwachung läuft und Browser initialisiert ist
-            if (this.monitoringInterval && this.browser && this.page && !this.page.isClosed()) {
+            if (this.monitoringInterval && this.monitoringInterval !== 'initializing') {
                 logger.info('💡 Nutze persistente Browser-Session für sofortige Prüfung');
+                
+                // Stelle sicher, dass Browser aktiv ist
+                await this.ensureBrowserIsActive();
+                
                 return await this.checkDatesOnly();
             } else {
                 logger.info('🔄 Fallback zur kompletten Terminprüfung (keine persistente Session)');
@@ -1102,6 +1114,124 @@ class AppointmentMonitor extends EventEmitter {
         this.watchedDates = monitoredSet;
         
         logger.info(`🔄 Gefundene Termine synchronisiert: ${this.foundAppointments.size} von ${monitoredDates.length} überwachten Terminen`);
+    }
+
+    // Robuste Browser-Wiederherstellung
+    async ensureBrowserIsActive() {
+        try {
+            // Prüfe Browser-Instanz
+            if (!this.browser) {
+                logger.warn('⚠️ Browser-Instanz nicht vorhanden, initialisiere neu...');
+                await this.initializeForContinuousMonitoring();
+                return;
+            }
+
+            // Prüfe ob Browser noch läuft
+            let browserConnected = false;
+            try {
+                await this.browser.version();
+                browserConnected = true;
+            } catch (error) {
+                logger.warn('⚠️ Browser-Verbindung verloren:', error.message);
+                browserConnected = false;
+            }
+
+            if (!browserConnected) {
+                logger.warn('⚠️ Browser ist nicht mehr erreichbar, starte neu...');
+                await this.cleanupBrowser();
+                await this.initializeForContinuousMonitoring();
+                return;
+            }
+
+            // Prüfe Page-Instanz
+            if (!this.page) {
+                logger.warn('⚠️ Page-Instanz nicht vorhanden, erstelle neue...');
+                await this.initializeForContinuousMonitoring();
+                return;
+            }
+
+            // Prüfe ob Page noch läuft
+            let pageActive = false;
+            try {
+                pageActive = !this.page.isClosed();
+                if (pageActive) {
+                    // Teste ob Page noch reagiert
+                    await this.page.evaluate(() => document.title);
+                }
+            } catch (error) {
+                logger.warn('⚠️ Page ist nicht mehr aktiv:', error.message);
+                pageActive = false;
+            }
+
+            if (!pageActive) {
+                logger.warn('⚠️ Page ist geschlossen oder nicht mehr aktiv, reinitialisiere...');
+                await this.initializeForContinuousMonitoring();
+                return;
+            }
+
+            // Prüfe ob die richtige Seite geladen ist
+            try {
+                const currentUrl = await this.page.url();
+                if (!currentUrl.includes('termine-kfz.lahn-dill-kreis.de')) {
+                    logger.warn('⚠️ Falsche Seite geladen, navigiere zur Terminseite...');
+                    await this.initializeForContinuousMonitoring();
+                    return;
+                }
+
+                // Prüfe ob der Kalender noch vorhanden ist
+                const calendarExists = await this.page.$('.dx-calendar-caption-button .dx-button-text');
+                if (!calendarExists) {
+                    logger.warn('⚠️ Kalender nicht mehr vorhanden, reinitialisiere...');
+                    await this.initializeForContinuousMonitoring();
+                    return;
+                }
+
+                logger.info('✅ Browser und Page sind aktiv und bereit');
+            } catch (error) {
+                logger.warn('⚠️ Fehler beim Prüfen der Seite:', error.message);
+                await this.initializeForContinuousMonitoring();
+            }
+
+        } catch (error) {
+            logger.error('❌ Fehler bei der Browser-Wiederherstellung:', error);
+            // Fallback: Komplett neu initialisieren
+            await this.cleanupBrowser();
+            await this.initializeForContinuousMonitoring();
+        }
+    }
+
+    // Browser-Cleanup
+    async cleanupBrowser() {
+        try {
+            logger.info('🧹 Bereinige Browser-Ressourcen...');
+            
+            if (this.page) {
+                try {
+                    if (!this.page.isClosed()) {
+                        await this.page.close();
+                    }
+                } catch (error) {
+                    logger.warn('⚠️ Fehler beim Schließen der Page:', error.message);
+                }
+                this.page = null;
+            }
+
+            if (this.browser) {
+                try {
+                    await this.browser.close();
+                } catch (error) {
+                    logger.warn('⚠️ Fehler beim Schließen des Browsers:', error.message);
+                }
+                this.browser = null;
+            }
+
+            logger.info('✅ Browser-Ressourcen bereinigt');
+        } catch (error) {
+            logger.error('❌ Fehler beim Bereinigen der Browser-Ressourcen:', error);
+            // Forciere Null-Setzen
+            this.page = null;
+            this.browser = null;
+        }
     }
 }
 

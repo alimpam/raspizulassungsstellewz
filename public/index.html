@@ -589,28 +589,27 @@
                 const monitoring = systemData.detailedMonitoring || systemData.monitoring;
                 
                 if (monitoring && monitoring.isActive) {
-                    monitoringStatus.className = 'status-dot status-active';
-                    
-                    // Behandle Initialisierungsstatus
+                    // Behandle verschiedene Monitoring-Zustände
                     if (monitoring.isInitializing) {
                         monitoringStatus.className = 'status-dot status-warning';
                         monitoringText.innerHTML = `Monitoring wird initialisiert...<br>
                             <small>Browser wird gestartet und Seite geladen</small>`;
-                        return; // Früher Rücksprung für Initialisierung
+                    } else {
+                        monitoringStatus.className = 'status-dot status-active';
+                        
+                        const checkingText = monitoring.isCurrentlyChecking ? ' (prüft gerade...)' : '';
+                        const lastCheck = monitoring.lastCheckTime ? 
+                            new Date(monitoring.lastCheckTime).toLocaleTimeString() : 'Noch kein Check';
+                        
+                        // Zeige das aktuelle Intervall an
+                        let intervalText = '';
+                        if (monitoring.intervalMinutes !== undefined && monitoring.intervalSeconds !== undefined) {
+                            intervalText = ` - Intervall: ${monitoring.intervalMinutes}:${monitoring.intervalSeconds.toString().padStart(2, '0')} Min`;
+                        }
+                        
+                        monitoringText.innerHTML = `Kontinuierliche Überwachung aktiv${intervalText}${checkingText}<br>
+                            <small>Letzter Check: ${lastCheck}</small>`;
                     }
-                    
-                    const checkingText = monitoring.isCurrentlyChecking ? ' (prüft gerade...)' : '';
-                    const lastCheck = monitoring.lastCheckTime ? 
-                        new Date(monitoring.lastCheckTime).toLocaleTimeString() : 'Noch kein Check';
-                    
-                    // Zeige das aktuelle Intervall an
-                    let intervalText = '';
-                    if (monitoring.intervalMinutes !== undefined && monitoring.intervalSeconds !== undefined) {
-                        intervalText = ` - Intervall: ${monitoring.intervalMinutes}:${monitoring.intervalSeconds.toString().padStart(2, '0')} Min`;
-                    }
-                    
-                    monitoringText.innerHTML = `Kontinuierliche Überwachung aktiv${intervalText}${checkingText}<br>
-                        <small>Letzter Check: ${lastCheck}</small>`;
                 } else {
                     monitoringStatus.className = 'status-dot status-inactive';
                     monitoringText.textContent = 'Monitoring inaktiv';
@@ -631,8 +630,17 @@
             // Toggle-Button Text aktualisieren
             const toggleText = document.getElementById('toggleText');
             if (toggleText) {
-                const isActive = systemData.detailedMonitoring?.isActive || systemData.monitoring?.isRunning;
-                toggleText.textContent = isActive ? 'Monitoring stoppen' : 'Monitoring starten';
+                const monitoring = systemData.detailedMonitoring || systemData.monitoring;
+                const isActive = monitoring?.isActive;
+                const isInitializing = monitoring?.isInitializing;
+                
+                if (isActive && isInitializing) {
+                    toggleText.textContent = 'Monitoring starten (läuft...)';
+                } else if (isActive) {
+                    toggleText.textContent = 'Monitoring stoppen';
+                } else {
+                    toggleText.textContent = 'Monitoring starten';
+                }
             }
 
             // Intervall-Eingabefeld mit aktuellen Werten aktualisieren
@@ -1000,6 +1008,21 @@
                     requestBody.intervalSeconds = seconds;
                     
                     console.log('Intervall:', `${minutes}:${seconds.toString().padStart(2, '0')}`, 'Total Sekunden:', totalSeconds);
+                    
+                    // Beim Starten: UI sofort auf "initializing" setzen
+                    const monitoringStatus = document.getElementById('monitoringStatus');
+                    const monitoringText = document.getElementById('monitoringText');
+                    const toggleText = document.getElementById('toggleText');
+                    
+                    if (monitoringStatus && monitoringText) {
+                        monitoringStatus.className = 'status-dot status-warning';
+                        monitoringText.innerHTML = `Monitoring wird gestartet...<br>
+                            <small>Browser wird initialisiert</small>`;
+                    }
+                    
+                    if (toggleText) {
+                        toggleText.textContent = 'Monitoring starten (läuft...)';
+                    }
                 }
                 
                 const response = await fetch(endpoint, {
@@ -1016,21 +1039,65 @@
                 
                 if (response.ok) {
                     showAlert(result.message, 'success');
-                    // Sofortige Updates nach Monitoring-Aktionen
-                    loadSystemStatus();
-                    loadDates();
                     
-                    // Weitere Updates nach kurzer Verzögerung
-                    setTimeout(() => {
-                        loadSystemStatus();
-                        loadDates();
-                    }, 2000);
+                    // Sofortige Updates nach Monitoring-Aktionen
+                    await loadSystemStatus();
+                    await loadDates();
+                    
+                    // Weitere Updates nach kurzer Verzögerung für bessere Synchronisation
+                    setTimeout(async () => {
+                        await loadSystemStatus();
+                        await loadDates();
+                    }, 1000);
+                    
+                    // Beim Starten: zusätzliche Updates nach 3 und 5 Sekunden
+                    if (!isRunning) {
+                        setTimeout(async () => {
+                            await loadSystemStatus();
+                        }, 3000);
+                        
+                        setTimeout(async () => {
+                            await loadSystemStatus();
+                        }, 5000);
+                    }
                 } else {
                     showAlert(result.error || 'Fehler beim Steuern des Monitorings', 'danger');
+                    
+                    // Bei Fehler: UI wieder auf inaktiv setzen
+                    if (!isRunning) {
+                        const monitoringStatus = document.getElementById('monitoringStatus');
+                        const monitoringText = document.getElementById('monitoringText');
+                        const toggleText = document.getElementById('toggleText');
+                        
+                        if (monitoringStatus && monitoringText) {
+                            monitoringStatus.className = 'status-dot status-inactive';
+                            monitoringText.textContent = 'Monitoring inaktiv';
+                        }
+                        
+                        if (toggleText) {
+                            toggleText.textContent = 'Monitoring starten';
+                        }
+                    }
                 }
             } catch (error) {
                 console.error('Fehler beim Monitoring-Toggle:', error);
                 showAlert('Fehler beim Steuern des Monitorings', 'danger');
+                
+                // Bei Fehler: UI wieder auf inaktiv setzen
+                if (!isRunning) {
+                    const monitoringStatus = document.getElementById('monitoringStatus');
+                    const monitoringText = document.getElementById('monitoringText');
+                    const toggleText = document.getElementById('toggleText');
+                    
+                    if (monitoringStatus && monitoringText) {
+                        monitoringStatus.className = 'status-dot status-inactive';
+                        monitoringText.textContent = 'Monitoring inaktiv';
+                    }
+                    
+                    if (toggleText) {
+                        toggleText.textContent = 'Monitoring starten';
+                    }
+                }
             }
         }
 
