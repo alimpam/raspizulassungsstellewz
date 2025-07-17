@@ -24,8 +24,9 @@ router.get('/', (req, res) => {
             'GET /api/location': 'Standort-Auswahl anzeigen',
             'PUT /api/location': 'Standort aktualisieren',
             'PUT /api/url': 'Ziel-URL aktualisieren',
-            'POST /api/monitoring/start': 'Monitoring starten',
-            'POST /api/monitoring/stop': 'Monitoring stoppen',
+            'POST /api/monitoring/start': 'Kontinuierliche Überwachung starten',
+            'POST /api/monitoring/stop': 'Kontinuierliche Überwachung stoppen',
+            'GET /api/monitoring/status': 'Detaillierter Monitoring-Status',
             'GET /api/dates': 'Überwachte Termine anzeigen',
             'POST /api/dates': 'Neuen Termin hinzufügen',
             'DELETE /api/dates/:year/:month/:day': 'Termin entfernen',
@@ -202,45 +203,28 @@ router.put('/url', (req, res) => {
     }
 });
 
-// Monitoring-Steuerung
-router.post('/monitoring/start', (req, res) => {
-    try {
-        monitor.startMonitoring();
-        res.json({ 
-            success: true, 
-            message: 'Monitoring gestartet' 
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-router.post('/monitoring/stop', (req, res) => {
-    try {
-        monitor.stopMonitoring();
-        res.json({ 
-            success: true, 
-            message: 'Monitoring gestoppt' 
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
+// Monitoring-Steuerung (entfernt - ersetzt durch kontinuierliche Überwachung)
 
 // Überwachte Termine
 router.get('/dates', (req, res) => {
-    const watchedDates = configService.getWatchedDates();
+    const monitoredDates = configService.getMonitoredDates();
     const foundAppointments = monitor.getFoundAppointments();
     
-    const dates = watchedDates.map(dateStr => {
+    console.log('API /dates - Überwachte Termine:', monitoredDates);
+    console.log('API /dates - Gefundene Termine:', foundAppointments);
+    
+    const dates = monitoredDates.map(dateStr => {
         const [yyyy, mm, dd] = dateStr.split('/');
+        const isAvailable = foundAppointments.includes(dateStr);
+        
         return {
             date: dateStr,
             germanDate: `${dd}.${mm}.${yyyy}`,
-            isAvailable: foundAppointments.includes(dateStr)
+            isAvailable: isAvailable
         };
     });
     
+    console.log('API /dates - Rückgabe:', dates);
     res.json(dates);
 });
 
@@ -259,6 +243,9 @@ router.post('/dates', (req, res) => {
         // Zu beiden Services hinzufügen
         const configAdded = configService.addWatchedDate(date);
         monitor.addWatchedDate(date);
+        
+        // Synchronisation sicherstellen
+        monitor.syncWithConfig();
         
         if (configAdded) {
             res.json({ 
@@ -293,6 +280,9 @@ router.delete('/dates/:year/:month/:day', (req, res) => {
         const configRemoved = configService.removeWatchedDate(date);
         monitor.removeWatchedDate(date);
         
+        // Synchronisation sicherstellen
+        monitor.syncWithConfig();
+        
         if (configRemoved) {
             res.json({ 
                 success: true, 
@@ -312,7 +302,7 @@ router.delete('/dates/:year/:month/:day', (req, res) => {
 // Sofortige Terminprüfung
 router.post('/check', async (req, res) => {
     try {
-        const results = await monitor.checkAppointments();
+        const results = await monitor.checkAppointmentsImmediate();
         
         res.json({
             success: true,
@@ -426,6 +416,101 @@ router.post('/config/import', (req, res) => {
         }
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Kontinuierliche Überwachung starten
+router.post('/monitoring/start', async (req, res) => {
+    try {
+        const { intervalMinutes = 5, intervalSeconds = 0 } = req.body;
+        
+        // Validierung der Eingaben
+        if (intervalMinutes < 0 || intervalMinutes > 60 || intervalSeconds < 0 || intervalSeconds > 59) {
+            return res.status(400).json({ 
+                error: 'Intervall muss zwischen 0:01 und 60:00 liegen' 
+            });
+        }
+        
+        const totalSeconds = intervalMinutes * 60 + intervalSeconds;
+        
+        if (totalSeconds < 1) {
+            return res.status(400).json({ 
+                error: 'Intervall muss mindestens 1 Sekunde betragen' 
+            });
+        }
+        
+        if (totalSeconds > 3600) { // 60 Minuten
+            return res.status(400).json({ 
+                error: 'Intervall darf nicht mehr als 60 Minuten betragen' 
+            });
+        }
+
+        await monitor.startContinuousMonitoring(intervalMinutes, intervalSeconds);
+        
+        res.json({ 
+            message: `Kontinuierliche Überwachung gestartet (alle ${intervalMinutes}:${intervalSeconds.toString().padStart(2, '0')} Min)`,
+            intervalMinutes,
+            intervalSeconds,
+            totalSeconds,
+            status: monitor.getMonitoringStatus()
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Kontinuierliche Überwachung stoppen
+router.post('/monitoring/stop', (req, res) => {
+    try {
+        monitor.stopContinuousMonitoring();
+        res.json({ 
+            message: 'Kontinuierliche Überwachung gestoppt',
+            status: monitor.getMonitoringStatus()
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Detaillierter Monitoring-Status
+router.get('/monitoring/status', (req, res) => {
+    try {
+        const status = monitor.getMonitoringStatus();
+        const monitoredDates = configService.getMonitoredDates();
+        const selectedLocation = configService.getSelectedLocation();
+        const selectedServices = configService.getSelectedServices();
+        
+        res.json({
+            ...status,
+            configuration: {
+                monitoredDates,
+                selectedLocation,
+                selectedServices,
+                totalMonitoredDates: monitoredDates.length,
+                hasValidConfig: !!(selectedLocation && selectedServices && monitoredDates.length > 0)
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Debug-Route für Konfiguration
+router.get('/debug/config', (req, res) => {
+    try {
+        const config = {
+            monitoredDates: configService.getMonitoredDates(),
+            watchedDates: configService.getWatchedDates(),
+            foundAppointments: monitor.getFoundAppointments(),
+            monitoringStatus: monitor.getMonitoringStatus(),
+            rawConfig: configService.getConfig()
+        };
+        
+        console.log('DEBUG Config:', config);
+        res.json(config);
+    } catch (error) {
+        console.error('DEBUG Config Error:', error);
+        res.status(500).json({ error: error.message });
     }
 });
 

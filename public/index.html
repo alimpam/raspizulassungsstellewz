@@ -290,6 +290,10 @@
                     <div class="stat-label">Verfügbare Termine</div>
                 </div>
                 <div class="stat-card">
+                    <div class="stat-number" id="foundCount">0</div>
+                    <div class="stat-label">Gefundene Termine</div>
+                </div>
+                <div class="stat-card">
                     <div class="stat-number" id="lastCheck">--</div>
                     <div class="stat-label">Letzte Prüfung</div>
                 </div>
@@ -374,6 +378,17 @@
                         </button>
                     </div>
                     <div style="margin-top: 15px;">
+                        <div style="margin-bottom: 10px;">
+                            <label for="intervalInput" style="display: block; margin-bottom: 5px; font-weight: bold;">
+                                Überwachungsintervall:
+                            </label>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <input type="text" id="intervalInput" placeholder="5:00" pattern="[0-9]{1,2}:[0-5][0-9]" 
+                                       value="5:00" title="Format: MM:SS (z.B. 5:00 für 5 Minuten)"
+                                       style="width: 100px; padding: 5px; border: 1px solid #ccc; border-radius: 3px;">
+                                <small style="color: #6c757d;">Format: MM:SS (z.B. 2:30 für 2 Min 30 Sek)</small>
+                            </div>
+                        </div>
                         <button class="btn" onclick="toggleMonitoring()">
                             <span id="toggleText">Monitoring steuern</span>
                         </button>
@@ -466,8 +481,12 @@
             loadServices();
             loadLocation();
             console.log('Alle Load-Funktionen aufgerufen');
-            // Auto-Refresh alle 30 Sekunden
-            setInterval(loadSystemStatus, 30000);
+            
+            // Auto-Refresh alle 5 Sekunden für bessere Real-time Updates
+            setInterval(loadSystemStatus, 5000);
+            
+            // Zusätzlich separate Intervalle für verschiedene Komponenten
+            setInterval(loadDates, 10000); // Termine alle 10 Sekunden
         });
 
         // Sofortiger Test beim Seitenladen
@@ -538,6 +557,14 @@
                 systemData = await response.json();
                 console.log('System Data:', systemData);
                 
+                // Zusätzlich detaillierten Monitoring-Status laden
+                const monitoringResponse = await fetch('/api/monitoring/status');
+                if (monitoringResponse.ok) {
+                    const monitoringData = await monitoringResponse.json();
+                    systemData.detailedMonitoring = monitoringData;
+                    console.log('Detailed Monitoring Data:', monitoringData);
+                }
+                
                 updateStatusUI();
                 console.log('Status UI aktualisiert');
             } catch (error) {
@@ -554,14 +581,27 @@
                 return;
             }
             
-            // Monitoring-Status
+            // Monitoring-Status - erweitert für kontinuierliche Überwachung
             const monitoringStatus = document.getElementById('monitoringStatus');
             const monitoringText = document.getElementById('monitoringText');
             
             if (monitoringStatus && monitoringText) {
-                if (systemData.monitoring && systemData.monitoring.isRunning) {
+                const monitoring = systemData.detailedMonitoring || systemData.monitoring;
+                
+                if (monitoring && monitoring.isActive) {
                     monitoringStatus.className = 'status-dot status-active';
-                    monitoringText.textContent = 'Monitoring aktiv';
+                    const checkingText = monitoring.isCurrentlyChecking ? ' (prüft gerade...)' : '';
+                    const lastCheck = monitoring.lastCheckTime ? 
+                        new Date(monitoring.lastCheckTime).toLocaleTimeString() : 'Noch kein Check';
+                    
+                    // Zeige das aktuelle Intervall an
+                    let intervalText = '';
+                    if (monitoring.intervalMinutes !== undefined && monitoring.intervalSeconds !== undefined) {
+                        intervalText = ` - Intervall: ${monitoring.intervalMinutes}:${monitoring.intervalSeconds.toString().padStart(2, '0')} Min`;
+                    }
+                    
+                    monitoringText.innerHTML = `Kontinuierliche Überwachung aktiv${intervalText}${checkingText}<br>
+                        <small>Letzter Check: ${lastCheck}</small>`;
                 } else {
                     monitoringStatus.className = 'status-dot status-inactive';
                     monitoringText.textContent = 'Monitoring inaktiv';
@@ -574,7 +614,26 @@
             
             if (systemStatus && systemText && systemData.system) {
                 systemStatus.className = 'status-dot status-active';
-                systemText.textContent = `Uptime: ${Math.floor(systemData.system.uptime / 3600)}h`;
+                const uptime = Math.floor(systemData.system.uptime / 3600);
+                const memoryUsage = Math.round(systemData.system.memory.heapUsed / 1024 / 1024);
+                systemText.innerHTML = `Uptime: ${uptime}h<br><small>Memory: ${memoryUsage}MB</small>`;
+            }
+
+            // Toggle-Button Text aktualisieren
+            const toggleText = document.getElementById('toggleText');
+            if (toggleText) {
+                const isActive = systemData.detailedMonitoring?.isActive || systemData.monitoring?.isRunning;
+                toggleText.textContent = isActive ? 'Monitoring stoppen' : 'Monitoring starten';
+            }
+
+            // Intervall-Eingabefeld mit aktuellen Werten aktualisieren
+            const intervalInput = document.getElementById('intervalInput');
+            if (intervalInput && systemData.detailedMonitoring) {
+                const monitoring = systemData.detailedMonitoring;
+                if (monitoring.intervalMinutes !== undefined && monitoring.intervalSeconds !== undefined) {
+                    const timeString = `${monitoring.intervalMinutes}:${monitoring.intervalSeconds.toString().padStart(2, '0')}`;
+                    intervalInput.value = timeString;
+                }
             }
 
             // Ziel-URL anzeigen
@@ -592,18 +651,27 @@
             // Statistiken
             const watchedCountEl = document.getElementById('watchedCount');
             const availableCountEl = document.getElementById('availableCount');
+            const foundCountEl = document.getElementById('foundCount');
             const lastCheckEl = document.getElementById('lastCheck');
             
             if (watchedCountEl) {
-                watchedCountEl.textContent = systemData.monitoring?.watchedDates?.length || 0;
+                const watchedCount = systemData.detailedMonitoring?.configuration?.totalMonitoredDates || 
+                                  systemData.monitoring?.watchedDates?.length || 0;
+                watchedCountEl.textContent = watchedCount;
             }
             if (availableCountEl) {
                 availableCountEl.textContent = systemData.monitoring?.foundAppointments?.length || 0;
             }
+            if (foundCountEl) {
+                const foundCount = systemData.detailedMonitoring?.foundAppointments?.length || 0;
+                foundCountEl.textContent = foundCount;
+            }
             if (lastCheckEl) {
-                if (systemData.monitoring?.lastCheck) {
-                    const lastCheck = new Date(systemData.monitoring.lastCheck);
-                    lastCheckEl.textContent = lastCheck.toLocaleTimeString('de-DE');
+                const lastCheck = systemData.detailedMonitoring?.lastCheckTime || 
+                                systemData.monitoring?.lastCheck;
+                if (lastCheck) {
+                    const lastCheckTime = new Date(lastCheck);
+                    lastCheckEl.textContent = lastCheckTime.toLocaleTimeString('de-DE');
                 } else {
                     lastCheckEl.textContent = '--';
                 }
@@ -872,24 +940,84 @@
 
         async function toggleMonitoring() {
             console.log('toggleMonitoring() aufgerufen');
-            const isRunning = systemData.monitoring?.isRunning;
+            
+            // Zuerst den aktuellen Status prüfen
+            const statusResponse = await fetch('/api/monitoring/status');
+            const statusData = await statusResponse.json();
+            
+            const isRunning = statusData.isActive;
             const endpoint = isRunning ? '/api/monitoring/stop' : '/api/monitoring/start';
             
             try {
                 console.log('Sende Anfrage an:', endpoint);
+                
+                let requestBody = {};
+                if (!isRunning) {
+                    // Beim Starten Intervall aus Eingabefeld lesen
+                    const intervalInput = document.getElementById('intervalInput');
+                    const intervalValue = intervalInput.value || '5:00';
+                    
+                    // Validierung des MM:SS Formats
+                    const timeRegex = /^(\d{1,2}):([0-5]\d)$/;
+                    const match = intervalValue.match(timeRegex);
+                    
+                    if (!match) {
+                        showAlert('Ungültiges Intervall-Format. Bitte verwenden Sie MM:SS (z.B. 5:00)', 'danger');
+                        return;
+                    }
+                    
+                    const minutes = parseInt(match[1]);
+                    const seconds = parseInt(match[2]);
+                    
+                    // Validierung der Werte
+                    if (minutes < 0 || minutes > 60 || seconds < 0 || seconds > 59) {
+                        showAlert('Intervall muss zwischen 0:01 und 60:00 liegen', 'danger');
+                        return;
+                    }
+                    
+                    const totalSeconds = minutes * 60 + seconds;
+                    
+                    if (totalSeconds < 1) {
+                        showAlert('Intervall muss mindestens 1 Sekunde betragen', 'danger');
+                        return;
+                    }
+                    
+                    if (totalSeconds > 3600) { // 60 Minuten
+                        showAlert('Intervall darf nicht mehr als 60 Minuten betragen', 'danger');
+                        return;
+                    }
+                    
+                    requestBody.intervalMinutes = minutes;
+                    requestBody.intervalSeconds = seconds;
+                    
+                    console.log('Intervall:', `${minutes}:${seconds.toString().padStart(2, '0')}`, 'Total Sekunden:', totalSeconds);
+                }
+                
                 const response = await fetch(endpoint, {
-                    method: 'POST'
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
                 });
                 
                 console.log('Response Status:', response.status);
                 const result = await response.json();
                 console.log('Response Result:', result);
                 
-                if (result.success) {
+                if (response.ok) {
                     showAlert(result.message, 'success');
+                    // Sofortige Updates nach Monitoring-Aktionen
                     loadSystemStatus();
+                    loadDates();
+                    
+                    // Weitere Updates nach kurzer Verzögerung
+                    setTimeout(() => {
+                        loadSystemStatus();
+                        loadDates();
+                    }, 2000);
                 } else {
-                    showAlert(result.message, 'danger');
+                    showAlert(result.error || 'Fehler beim Steuern des Monitorings', 'danger');
                 }
             } catch (error) {
                 console.error('Fehler beim Monitoring-Toggle:', error);

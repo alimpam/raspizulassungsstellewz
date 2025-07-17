@@ -26,11 +26,13 @@ class ConfigService {
             puppeteerOptions: {
                 headless: true,
                 timeout: 30000,
-                waitForNetworkIdle: 2000
+                waitForNetworkIdle: 2000,
+                locale: 'de-DE',
+                timezone: 'Europe/Berlin'
             },
             website: {
                 url: 'https://termine-kfz.lahn-dill-kreis.de/720183266/appointment/Index/1',
-                userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             }
         };
         
@@ -113,8 +115,12 @@ class ConfigService {
         return false;
     }
 
+    getMonitoredDates() {
+        return this.config.watchedDates || [];
+    }
+
     getWatchedDates() {
-        return this.config.watchedDates;
+        return this.getMonitoredDates();
     }
 
     setCheckInterval(interval) {
