@@ -19,9 +19,16 @@ router.get('/', (req, res) => {
             'GET /api/status': 'System-Status anzeigen',
             'GET /api/config': 'Konfiguration anzeigen',
             'PUT /api/config': 'Konfiguration aktualisieren',
+            'GET /api/services': 'Verfügbare Dienste anzeigen',
+            'PUT /api/services': 'Ausgewählte Dienste aktualisieren',
+            'GET /api/location': 'Standort-Auswahl anzeigen',
+            'PUT /api/location': 'Standort aktualisieren',
+            'PUT /api/url': 'Ziel-URL aktualisieren',
+            'POST /api/monitoring/start': 'Monitoring starten',
+            'POST /api/monitoring/stop': 'Monitoring stoppen',
             'GET /api/dates': 'Überwachte Termine anzeigen',
             'POST /api/dates': 'Neuen Termin hinzufügen',
-            'DELETE /api/dates/:date': 'Termin entfernen',
+            'DELETE /api/dates/:year/:month/:day': 'Termin entfernen',
             'POST /api/check': 'Sofortige Terminprüfung',
             'POST /api/test-notification': 'Test-Benachrichtigung senden',
             'GET /api/notifications/status': 'Status der Benachrichtigungsdienste'
@@ -40,6 +47,9 @@ router.get('/status', (req, res) => {
         monitoring: {
             isRunning: monitor.isRunning(),
             lastCheck: monitor.getLastCheckTime(),
+            targetUrl: monitor.getTargetUrl(),
+            selectedServices: configService.getSelectedServices(),
+            selectedLocation: configService.getSelectedLocation(),
             watchedDates: monitor.getWatchedDates(),
             foundAppointments: monitor.getFoundAppointments()
         },
@@ -63,6 +73,157 @@ router.put('/config', (req, res) => {
         }
     } catch (error) {
         res.status(400).json({ success: false, message: error.message });
+    }
+});
+
+// Service-Auswahl
+router.get('/services', (req, res) => {
+    const selectedServices = configService.getSelectedServices();
+    const serviceMapping = configService.getServiceMapping();
+    
+    const services = Object.entries(serviceMapping).map(([key, service]) => ({
+        key,
+        ...service,
+        selected: selectedServices[key] || false
+    }));
+    
+    res.json(services);
+});
+
+router.put('/services', (req, res) => {
+    try {
+        const { services } = req.body;
+        
+        // Validierung
+        if (!services || typeof services !== 'object') {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Ungültige Service-Daten' 
+            });
+        }
+        
+        // Nur gültige Services akzeptieren
+        const validServices = ['neuzulassung', 'umschreibung', 'ausfuhr'];
+        const filteredServices = {};
+        
+        for (const [key, value] of Object.entries(services)) {
+            if (validServices.includes(key) && typeof value === 'boolean') {
+                filteredServices[key] = value;
+            }
+        }
+        
+        // Mindestens ein Service muss ausgewählt sein
+        if (!Object.values(filteredServices).some(v => v)) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Mindestens ein Service muss ausgewählt werden' 
+            });
+        }
+        
+        configService.updateSelectedServices(filteredServices);
+        
+        res.json({ 
+            success: true, 
+            message: 'Service-Auswahl aktualisiert',
+            services: filteredServices
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Location-Auswahl
+router.get('/location', (req, res) => {
+    const selectedLocation = configService.getSelectedLocation();
+    const locationMapping = configService.getLocationMapping();
+    
+    res.json({
+        selected: selectedLocation,
+        available: Object.values(locationMapping)
+    });
+});
+
+router.put('/location', (req, res) => {
+    try {
+        const { location } = req.body;
+        
+        // Validierung
+        if (!location || !location.value || !location.name) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Ungültige Standort-Daten (value und name erforderlich)' 
+            });
+        }
+        
+        // Prüfen ob Standort verfügbar ist
+        const locationMapping = configService.getLocationMapping();
+        if (!locationMapping[location.value]) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Standort nicht verfügbar' 
+            });
+        }
+        
+        configService.updateSelectedLocation(location);
+        
+        res.json({ 
+            success: true, 
+            message: `Standort aktualisiert: ${location.name}`,
+            location: location
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// URL-Konfiguration
+router.put('/url', (req, res) => {
+    try {
+        const { url } = req.body;
+        
+        // Validierung
+        if (!url || !url.startsWith('https://termine-kfz.lahn-dill-kreis.de/')) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Ungültige URL. Muss mit https://termine-kfz.lahn-dill-kreis.de/ beginnen' 
+            });
+        }
+        
+        // URL in Konfiguration und Monitor aktualisieren
+        configService.updateConfig({ website: { ...configService.getConfig().website, url } });
+        monitor.updateTargetUrl(url);
+        
+        res.json({ 
+            success: true, 
+            message: `Ziel-URL aktualisiert: ${url}` 
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Monitoring-Steuerung
+router.post('/monitoring/start', (req, res) => {
+    try {
+        monitor.startMonitoring();
+        res.json({ 
+            success: true, 
+            message: 'Monitoring gestartet' 
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+router.post('/monitoring/stop', (req, res) => {
+    try {
+        monitor.stopMonitoring();
+        res.json({ 
+            success: true, 
+            message: 'Monitoring gestoppt' 
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
@@ -115,9 +276,18 @@ router.post('/dates', (req, res) => {
     }
 });
 
-router.delete('/dates/:date', (req, res) => {
+router.delete('/dates/:year/:month/:day', (req, res) => {
     try {
-        const { date } = req.params;
+        const { year, month, day } = req.params;
+        const date = `${year}/${month}/${day}`;
+        
+        // Validierung
+        if (!configService.isValidDateString(date)) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Ungültiges Datumsformat' 
+            });
+        }
         
         // Aus beiden Services entfernen
         const configRemoved = configService.removeWatchedDate(date);

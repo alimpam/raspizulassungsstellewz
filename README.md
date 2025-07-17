@@ -66,6 +66,116 @@ DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 npm start
 ```
 
+## 🌐 URL-Konfiguration
+
+Die Anwendung überwacht standardmäßig die KFZ-Zulassungsstellentermine unter:
+
+```
+https://termine-kfz.lahn-dill-kreis.de/720183266/appointment/Index/1
+```
+
+### URL ändern
+
+Die Ziel-URL kann auf verschiedene Weise geändert werden:
+
+#### 1. Web-Interface
+- Öffnen Sie das Dashboard
+- Klicken Sie im "Monitoring-Status" auf "URL ändern"
+- Geben Sie die neue URL ein
+
+#### 2. API-Endpunkt
+```bash
+curl -X PUT http://localhost:3000/api/url \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://termine-kfz.lahn-dill-kreis.de/720183266/appointment/Index/1"}'
+```
+
+#### 3. Konfigurationsdatei
+Bearbeiten Sie `config/settings.json`:
+
+```json
+{
+  "website": {
+    "url": "https://termine-kfz.lahn-dill-kreis.de/720183266/appointment/Index/1"
+  }
+}
+```
+
+**Wichtig:** Die URL muss mit `https://termine-kfz.lahn-dill-kreis.de/` beginnen.
+
+### Service-Auswahl
+
+Das System kann für verschiedene KFZ-Zulassungsanliegen konfiguriert werden:
+
+#### Verfügbare Services:
+- **Neuzulassung**: Erstmalige Zulassung eines Fahrzeugs
+- **Umschreibung**: Änderung der Fahrzeugdaten oder des Halters  
+- **Ausfuhr**: Fahrzeugexport ins Ausland
+
+#### Konfiguration über Web-Interface:
+1. Öffnen Sie das Dashboard
+2. Navigieren Sie zur "Service-Auswahl" Karte
+3. Wählen Sie die gewünschten Services aus
+4. Änderungen werden automatisch gespeichert
+
+#### Konfiguration über API:
+```bash
+# Aktuelle Service-Auswahl anzeigen
+curl http://localhost:3000/api/services
+
+# Service-Auswahl aktualisieren
+curl -X PUT http://localhost:3000/api/services \
+  -H "Content-Type: application/json" \
+  -d '{"services": {"neuzulassung": true, "umschreibung": false, "ausfuhr": true}}'
+```
+
+#### Konfigurationsdatei:
+```json
+{
+  "selectedServices": {
+    "neuzulassung": true,
+    "umschreibung": false,
+    "ausfuhr": false
+  }
+}
+```
+
+**Wichtig:** Mindestens ein Service muss immer ausgewählt sein.
+
+### Standort-Auswahl
+
+Das System kann für verschiedene Standorte der KFZ-Zulassung konfiguriert werden:
+
+#### Verfügbare Standorte:
+- **Kfz-Zulassung Wetzlar** (ID: 720) - Hauptstelle
+
+#### Konfiguration über Web-Interface:
+1. Öffnen Sie das Dashboard
+2. Navigieren Sie zur "Standort-Auswahl" Karte
+3. Wählen Sie den gewünschten Standort aus dem Dropdown-Menü
+4. Änderungen werden automatisch gespeichert
+
+#### Konfiguration über API:
+```bash
+# Aktuelle Standort-Auswahl anzeigen
+curl http://localhost:3000/api/location
+
+# Standort aktualisieren
+curl -X PUT http://localhost:3000/api/location \
+  -H "Content-Type: application/json" \
+  -d '{"location": {"value": "720", "name": "Kfz-Zulassung Wetzlar"}}'
+```
+
+#### Konfigurationsdatei:
+```json
+{
+  "selectedLocation": {
+    "value": "720",
+    "name": "Kfz-Zulassung Wetzlar"
+  }
+}
+```
+
 ## 📱 Verwendung
 
 ### Web-Interface

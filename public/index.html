@@ -253,6 +253,21 @@
             color: #6c757d;
             font-size: 0.9em;
         }
+
+        .service-item {
+            margin-bottom: 10px;
+        }
+
+        .service-item label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .service-item small {
+            color: #6c757d;
+            margin-left: 26px;
+        }
     </style>
 </head>
 <body>
@@ -294,6 +309,54 @@
                 </div>
 
                 <div class="card">
+                    <h2>🛠️ Service-Auswahl</h2>
+                    <p style="font-size: 0.9em; color: #6c757d; margin-bottom: 15px;">
+                        Wählen Sie aus, für welche Anliegen Sie Termine überwachen möchten:
+                    </p>
+                    <div id="serviceSelection">
+                        <div class="service-item" style="margin-bottom: 10px;">
+                            <label style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="service-neuzulassung" onchange="updateServices()">
+                                <span>Neuzulassung</span>
+                            </label>
+                            <small style="color: #6c757d; margin-left: 26px;">Erstmalige Zulassung eines Fahrzeugs</small>
+                        </div>
+                        <div class="service-item" style="margin-bottom: 10px;">
+                            <label style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="service-umschreibung" onchange="updateServices()">
+                                <span>Umschreibung</span>
+                            </label>
+                            <small style="color: #6c757d; margin-left: 26px;">Änderung der Fahrzeugdaten oder des Halters</small>
+                        </div>
+                        <div class="service-item" style="margin-bottom: 10px;">
+                            <label style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="service-ausfuhr" onchange="updateServices()">
+                                <span>Ausfuhr</span>
+                            </label>
+                            <small style="color: #6c757d; margin-left: 26px;">Fahrzeugexport ins Ausland</small>
+                        </div>
+                    </div>
+                    <div style="margin-top: 10px; font-size: 0.8em; color: #dc3545;">
+                        <strong>Hinweis:</strong> Mindestens ein Service muss ausgewählt sein.
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>🏢 Standort-Auswahl</h2>
+                    <p style="font-size: 0.9em; color: #6c757d; margin-bottom: 15px;">
+                        Wählen Sie den Standort für die Terminbuchung aus:
+                    </p>
+                    <div id="locationSelection">
+                        <select id="locationSelect" class="form-control" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" onchange="updateLocation()">
+                            <option value="">Lädt...</option>
+                        </select>
+                    </div>
+                    <div style="margin-top: 10px; font-size: 0.9em; color: #6c757d;">
+                        <strong>Aktueller Standort:</strong> <span id="currentLocation">Lädt...</span>
+                    </div>
+                </div>
+
+                <div class="card">
                     <h2>🔄 Monitoring-Status</h2>
                     <div class="status-indicator">
                         <div class="status-dot" id="monitoringStatus"></div>
@@ -302,6 +365,13 @@
                     <div class="status-indicator">
                         <div class="status-dot" id="systemStatus"></div>
                         <span id="systemText">System-Status</span>
+                    </div>
+                    <div style="margin-top: 10px; font-size: 0.9em; color: #6c757d;">
+                        <strong>Ziel-URL:</strong><br>
+                        <span id="targetUrl" style="word-break: break-all;">Lädt...</span>
+                        <button class="btn" style="margin-left: 10px; padding: 5px 10px; font-size: 0.8em;" onclick="updateTargetUrl()">
+                            URL ändern
+                        </button>
                     </div>
                     <div style="margin-top: 15px;">
                         <button class="btn" onclick="toggleMonitoring()">
@@ -336,23 +406,140 @@
         let systemData = {};
         let logMessages = [];
 
+        // Debug-Funktion zum Testen aller API-Endpunkte
+        async function debugAllEndpoints() {
+            console.log('=== DEBUG: Teste alle API-Endpunkte ===');
+            
+            try {
+                console.log('1. Teste /api/status');
+                const statusResponse = await fetch('/api/status');
+                console.log('Status Response:', statusResponse.status, statusResponse.ok);
+                if (statusResponse.ok) {
+                    const statusData = await statusResponse.json();
+                    console.log('Status Data:', statusData);
+                }
+            } catch (error) {
+                console.error('Fehler bei /api/status:', error);
+            }
+
+            try {
+                console.log('2. Teste /api/location');
+                const locationResponse = await fetch('/api/location');
+                console.log('Location Response:', locationResponse.status, locationResponse.ok);
+                if (locationResponse.ok) {
+                    const locationData = await locationResponse.json();
+                    console.log('Location Data:', locationData);
+                }
+            } catch (error) {
+                console.error('Fehler bei /api/location:', error);
+            }
+
+            try {
+                console.log('3. Teste /api/services');
+                const servicesResponse = await fetch('/api/services');
+                console.log('Services Response:', servicesResponse.status, servicesResponse.ok);
+                if (servicesResponse.ok) {
+                    const servicesData = await servicesResponse.json();
+                    console.log('Services Data:', servicesData);
+                }
+            } catch (error) {
+                console.error('Fehler bei /api/services:', error);
+            }
+            
+            console.log('=== DEBUG: Teste UI-Elemente ===');
+            console.log('locationSelect:', document.getElementById('locationSelect'));
+            console.log('currentLocation:', document.getElementById('currentLocation'));
+            console.log('targetUrl:', document.getElementById('targetUrl'));
+            console.log('=== DEBUG ENDE ===');
+        }
+
         // Initialisierung
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM Content Loaded - Initialisierung startet');
+            
+            // Sofortiges Debugging
+            setTimeout(debugAllEndpoints, 1000);
+            
             loadSystemStatus();
             loadDates();
             loadNotificationStatus();
-            
-            // Auto-Update alle 30 Sekunden
+            loadServices();
+            loadLocation();
+            console.log('Alle Load-Funktionen aufgerufen');
+            // Auto-Refresh alle 30 Sekunden
             setInterval(loadSystemStatus, 30000);
-            setInterval(loadDates, 30000);
+        });
+
+        // Sofortiger Test beim Seitenladen
+        console.log('JavaScript wird ausgeführt!');
+        
+        // Test der Fetch-Funktionalität
+        window.addEventListener('load', function() {
+            console.log('Window loaded - starte Tests');
+            
+            // Test 1: Basis-Fetch
+            fetch('/api/status')
+                .then(response => {
+                    console.log('Test 1 - Status response:', response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Test 1 - Status data:', data);
+                    // Aktualisiere die Ziel-URL sofort
+                    const targetUrlElement = document.getElementById('targetUrl');
+                    if (targetUrlElement && data.monitoring?.targetUrl) {
+                        targetUrlElement.textContent = data.monitoring.targetUrl;
+                        console.log('Ziel-URL aktualisiert:', data.monitoring.targetUrl);
+                    }
+                })
+                .catch(error => console.error('Test 1 - Fehler:', error));
+            
+            // Test 2: Location-Fetch
+            fetch('/api/location')
+                .then(response => {
+                    console.log('Test 2 - Location response:', response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Test 2 - Location data:', data);
+                    // Aktualisiere die Standort-Anzeige sofort
+                    const currentLocationElement = document.getElementById('currentLocation');
+                    const locationSelectElement = document.getElementById('locationSelect');
+                    
+                    if (currentLocationElement && data.selected?.name) {
+                        currentLocationElement.textContent = data.selected.name;
+                        console.log('Standort-Anzeige aktualisiert:', data.selected.name);
+                    }
+                    
+                    if (locationSelectElement && data.available) {
+                        locationSelectElement.innerHTML = '';
+                        data.available.forEach(location => {
+                            const option = document.createElement('option');
+                            option.value = location.value;
+                            option.textContent = location.name;
+                            option.selected = location.value === data.selected.value;
+                            locationSelectElement.appendChild(option);
+                        });
+                        console.log('Standort-Select aktualisiert');
+                    }
+                })
+                .catch(error => console.error('Test 2 - Fehler:', error));
         });
 
         async function loadSystemStatus() {
+            console.log('loadSystemStatus() aufgerufen');
             try {
+                console.log('Lade System-Status...');
                 const response = await fetch('/api/status');
+                console.log('Status Response:', response.status);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 systemData = await response.json();
+                console.log('System Data:', systemData);
                 
                 updateStatusUI();
+                console.log('Status UI aktualisiert');
             } catch (error) {
                 console.error('Fehler beim Laden des Status:', error);
                 showAlert('Fehler beim Laden des System-Status', 'danger');
@@ -360,35 +547,66 @@
         }
 
         function updateStatusUI() {
+            console.log('updateStatusUI() aufgerufen mit systemData:', systemData);
+            
+            if (!systemData) {
+                console.error('systemData ist undefined!');
+                return;
+            }
+            
             // Monitoring-Status
             const monitoringStatus = document.getElementById('monitoringStatus');
             const monitoringText = document.getElementById('monitoringText');
             
-            if (systemData.monitoring && systemData.monitoring.isRunning) {
-                monitoringStatus.className = 'status-dot status-active';
-                monitoringText.textContent = 'Monitoring aktiv';
-            } else {
-                monitoringStatus.className = 'status-dot status-inactive';
-                monitoringText.textContent = 'Monitoring inaktiv';
+            if (monitoringStatus && monitoringText) {
+                if (systemData.monitoring && systemData.monitoring.isRunning) {
+                    monitoringStatus.className = 'status-dot status-active';
+                    monitoringText.textContent = 'Monitoring aktiv';
+                } else {
+                    monitoringStatus.className = 'status-dot status-inactive';
+                    monitoringText.textContent = 'Monitoring inaktiv';
+                }
             }
 
             // System-Status
             const systemStatus = document.getElementById('systemStatus');
             const systemText = document.getElementById('systemText');
             
-            systemStatus.className = 'status-dot status-active';
-            systemText.textContent = `Uptime: ${Math.floor(systemData.system.uptime / 3600)}h`;
+            if (systemStatus && systemText && systemData.system) {
+                systemStatus.className = 'status-dot status-active';
+                systemText.textContent = `Uptime: ${Math.floor(systemData.system.uptime / 3600)}h`;
+            }
+
+            // Ziel-URL anzeigen
+            const targetUrl = document.getElementById('targetUrl');
+            console.log('Target URL Element:', targetUrl);
+            console.log('Target URL Value:', systemData.monitoring?.targetUrl);
+            if (targetUrl) {
+                if (systemData.monitoring?.targetUrl) {
+                    targetUrl.textContent = systemData.monitoring.targetUrl;
+                } else {
+                    targetUrl.textContent = 'Nicht verfügbar';
+                }
+            }
 
             // Statistiken
-            document.getElementById('watchedCount').textContent = 
-                systemData.monitoring?.watchedDates?.length || 0;
-            document.getElementById('availableCount').textContent = 
-                systemData.monitoring?.foundAppointments?.length || 0;
+            const watchedCountEl = document.getElementById('watchedCount');
+            const availableCountEl = document.getElementById('availableCount');
+            const lastCheckEl = document.getElementById('lastCheck');
             
-            if (systemData.monitoring?.lastCheck) {
-                const lastCheck = new Date(systemData.monitoring.lastCheck);
-                document.getElementById('lastCheck').textContent = 
-                    lastCheck.toLocaleTimeString('de-DE');
+            if (watchedCountEl) {
+                watchedCountEl.textContent = systemData.monitoring?.watchedDates?.length || 0;
+            }
+            if (availableCountEl) {
+                availableCountEl.textContent = systemData.monitoring?.foundAppointments?.length || 0;
+            }
+            if (lastCheckEl) {
+                if (systemData.monitoring?.lastCheck) {
+                    const lastCheck = new Date(systemData.monitoring.lastCheck);
+                    lastCheckEl.textContent = lastCheck.toLocaleTimeString('de-DE');
+                } else {
+                    lastCheckEl.textContent = '--';
+                }
             }
         }
 
@@ -452,19 +670,123 @@
             }
         }
 
+        async function loadLocation() {
+            console.log('loadLocation() aufgerufen');
+            try {
+                console.log('Lade Standort-Info...');
+                const response = await fetch('/api/location');
+                console.log('Location Response:', response.status);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const locationData = await response.json();
+                console.log('Location Data:', locationData);
+                
+                updateLocationUI(locationData);
+                console.log('Location UI aktualisiert');
+            } catch (error) {
+                console.error('Fehler beim Laden der Standort-Auswahl:', error);
+                showAlert('Fehler beim Laden der Standort-Auswahl', 'danger');
+                // Fallback: Zeige "Nicht verfügbar" an
+                document.getElementById('locationSelect').innerHTML = '<option value="">Nicht verfügbar</option>';
+                document.getElementById('currentLocation').textContent = 'Nicht verfügbar';
+            }
+        }
+
+        function updateLocationUI(locationData) {
+            console.log('updateLocationUI() aufgerufen mit locationData:', locationData);
+            
+            const locationSelect = document.getElementById('locationSelect');
+            const currentLocation = document.getElementById('currentLocation');
+            
+            if (!locationSelect || !currentLocation) {
+                console.error('Location UI Elemente nicht gefunden!');
+                return;
+            }
+            
+            if (!locationData || !locationData.available || !locationData.selected) {
+                console.error('Ungültige locationData:', locationData);
+                locationSelect.innerHTML = '<option value="">Fehler beim Laden</option>';
+                currentLocation.textContent = 'Fehler beim Laden';
+                return;
+            }
+            
+            // Select-Options aktualisieren
+            locationSelect.innerHTML = '';
+            locationData.available.forEach(location => {
+                const option = document.createElement('option');
+                option.value = location.value;
+                option.textContent = location.name;
+                option.selected = location.value === locationData.selected.value;
+                locationSelect.appendChild(option);
+            });
+            
+            // Aktuellen Standort anzeigen
+            currentLocation.textContent = locationData.selected.name || 'Nicht ausgewählt';
+            
+            console.log('Location UI erfolgreich aktualisiert');
+        }
+
+        async function loadServices() {
+            console.log('loadServices() aufgerufen');
+            try {
+                console.log('Lade Services...');
+                const response = await fetch('/api/services');
+                console.log('Services Response:', response.status);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const services = await response.json();
+                console.log('Services Data:', services);
+                
+                updateServiceUI(services);
+                console.log('Services UI aktualisiert');
+            } catch (error) {
+                console.error('Fehler beim Laden der Services:', error);
+                showAlert('Fehler beim Laden der Service-Auswahl', 'danger');
+            }
+        }
+
+        function updateServiceUI(services) {
+            console.log('updateServiceUI() aufgerufen mit services:', services);
+            
+            if (!services || !Array.isArray(services)) {
+                console.error('Ungültige services data:', services);
+                return;
+            }
+            
+            services.forEach(service => {
+                const checkbox = document.getElementById(`service-${service.key}`);
+                if (checkbox) {
+                    checkbox.checked = service.selected;
+                    console.log(`Service ${service.key} auf ${service.selected} gesetzt`);
+                } else {
+                    console.warn(`Checkbox für Service ${service.key} nicht gefunden`);
+                }
+            });
+            
+            console.log('Service UI erfolgreich aktualisiert');
+        }
+
         async function addDate() {
+            console.log('addDate() aufgerufen');
             const dateInput = document.getElementById('dateInput');
             const dateValue = dateInput.value;
             
+            console.log('Datum-Wert:', dateValue);
+            
             if (!dateValue) {
+                console.log('Kein Datum ausgewählt');
                 showAlert('Bitte wählen Sie ein Datum aus', 'warning');
                 return;
             }
             
             // Datum von YYYY-MM-DD zu YYYY/MM/DD konvertieren
             const formattedDate = dateValue.replace(/-/g, '/');
+            console.log('Formatiertes Datum:', formattedDate);
             
             try {
+                console.log('Sende Anfrage an /api/dates');
                 const response = await fetch('/api/dates', {
                     method: 'POST',
                     headers: {
@@ -473,7 +795,9 @@
                     body: JSON.stringify({ date: formattedDate })
                 });
                 
+                console.log('Response Status:', response.status);
                 const result = await response.json();
+                console.log('Response Result:', result);
                 
                 if (result.success) {
                     showAlert('Termin erfolgreich hinzugefügt', 'success');
@@ -490,7 +814,13 @@
 
         async function removeDate(date) {
             try {
-                const response = await fetch(`/api/dates/${date}`, {
+                // Datum von YYYY/MM/DD in URL-Format konvertieren
+                const dateParts = date.split('/');
+                const url = `/api/dates/${dateParts[0]}/${dateParts[1]}/${dateParts[2]}`;
+                
+                console.log('Lösche Datum:', date, 'URL:', url);
+                
+                const response = await fetch(url, {
                     method: 'DELETE'
                 });
                 
@@ -509,17 +839,21 @@
         }
 
         async function checkNow() {
+            console.log('checkNow() aufgerufen');
             const button = document.getElementById('checkBtnText');
             const originalText = button.textContent;
             
             button.innerHTML = '<div class="loading"></div> Prüfe...';
             
             try {
+                console.log('Sende Anfrage an /api/check');
                 const response = await fetch('/api/check', {
                     method: 'POST'
                 });
                 
+                console.log('Response Status:', response.status);
                 const result = await response.json();
+                console.log('Response Result:', result);
                 
                 if (result.success) {
                     showAlert('Terminprüfung erfolgreich durchgeführt', 'success');
@@ -533,6 +867,68 @@
                 showAlert('Fehler bei der Terminprüfung', 'danger');
             } finally {
                 button.textContent = originalText;
+            }
+        }
+
+        async function toggleMonitoring() {
+            console.log('toggleMonitoring() aufgerufen');
+            const isRunning = systemData.monitoring?.isRunning;
+            const endpoint = isRunning ? '/api/monitoring/stop' : '/api/monitoring/start';
+            
+            try {
+                console.log('Sende Anfrage an:', endpoint);
+                const response = await fetch(endpoint, {
+                    method: 'POST'
+                });
+                
+                console.log('Response Status:', response.status);
+                const result = await response.json();
+                console.log('Response Result:', result);
+                
+                if (result.success) {
+                    showAlert(result.message, 'success');
+                    loadSystemStatus();
+                } else {
+                    showAlert(result.message, 'danger');
+                }
+            } catch (error) {
+                console.error('Fehler beim Monitoring-Toggle:', error);
+                showAlert('Fehler beim Steuern des Monitorings', 'danger');
+            }
+        }
+
+        async function updateTargetUrl() {
+            const newUrl = prompt('Neue Ziel-URL eingeben:', systemData.monitoring?.targetUrl || '');
+            
+            if (!newUrl || newUrl.trim() === '') {
+                return;
+            }
+            
+            if (!newUrl.startsWith('https://termine-kfz.lahn-dill-kreis.de/')) {
+                showAlert('URL muss mit https://termine-kfz.lahn-dill-kreis.de/ beginnen', 'danger');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/url', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ url: newUrl.trim() })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('Ziel-URL erfolgreich aktualisiert', 'success');
+                    loadSystemStatus();
+                } else {
+                    showAlert(result.message, 'danger');
+                }
+            } catch (error) {
+                console.error('Fehler beim Aktualisieren der URL:', error);
+                showAlert('Fehler beim Aktualisieren der URL', 'danger');
             }
         }
 
@@ -556,7 +952,14 @@
         }
 
         function showAlert(message, type) {
+            console.log('showAlert() aufgerufen:', message, type);
             const alertsContainer = document.getElementById('alerts');
+            
+            if (!alertsContainer) {
+                console.error('Alerts container nicht gefunden!');
+                return;
+            }
+            
             const alert = document.createElement('div');
             alert.className = `alert alert-${type}`;
             alert.textContent = message;
@@ -571,8 +974,87 @@
             }, 5000);
         }
 
-        function toggleMonitoring() {
-            showAlert('Monitoring-Steuerung wird implementiert', 'warning');
+        async function updateServices() {
+            console.log('updateServices() aufgerufen');
+            const services = {
+                neuzulassung: document.getElementById('service-neuzulassung').checked,
+                umschreibung: document.getElementById('service-umschreibung').checked,
+                ausfuhr: document.getElementById('service-ausfuhr').checked
+            };
+
+            console.log('Ausgewählte Services:', services);
+
+            // Prüfen ob mindestens ein Service ausgewählt ist
+            if (!Object.values(services).some(v => v)) {
+                console.log('Kein Service ausgewählt');
+                showAlert('Mindestens ein Service muss ausgewählt werden', 'warning');
+                loadServices(); // Checkboxen zurücksetzen
+                return;
+            }
+
+            try {
+                console.log('Sende Anfrage an /api/services');
+                const response = await fetch('/api/services', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ services })
+                });
+
+                console.log('Response Status:', response.status);
+                const result = await response.json();
+                console.log('Response Result:', result);
+
+                if (result.success) {
+                    showAlert('Service-Auswahl aktualisiert', 'success');
+                } else {
+                    showAlert(result.message, 'danger');
+                    loadServices(); // Checkboxen zurücksetzen
+                }
+            } catch (error) {
+                console.error('Fehler beim Aktualisieren der Services:', error);
+                showAlert('Fehler beim Aktualisieren der Service-Auswahl', 'danger');
+                loadServices(); // Checkboxen zurücksetzen
+            }
+        }
+
+        async function updateLocation() {
+            const locationSelect = document.getElementById('locationSelect');
+            const selectedValue = locationSelect.value;
+            const selectedText = locationSelect.options[locationSelect.selectedIndex].text;
+            
+            if (!selectedValue) {
+                return;
+            }
+            
+            const location = {
+                value: selectedValue,
+                name: selectedText
+            };
+            
+            try {
+                console.log('Aktualisiere Standort:', location);
+                const response = await fetch('/api/location', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ location })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('Standort erfolgreich aktualisiert', 'success');
+                    loadLocation(); // Aktualisiere die Anzeige
+                } else {
+                    showAlert(result.message, 'danger');
+                }
+            } catch (error) {
+                console.error('Fehler beim Aktualisieren des Standorts:', error);
+                showAlert('Fehler beim Aktualisieren des Standorts', 'danger');
+            }
         }
     </script>
 </body>

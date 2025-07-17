@@ -14,13 +14,22 @@ class ConfigService {
                 discord: true
             },
             watchedDates: [],
+            selectedServices: {
+                neuzulassung: true,
+                umschreibung: false,
+                ausfuhr: false
+            },
+            selectedLocation: {
+                value: '720',
+                name: 'Kfz-Zulassung Wetzlar'
+            },
             puppeteerOptions: {
                 headless: true,
                 timeout: 30000,
                 waitForNetworkIdle: 2000
             },
             website: {
-                url: 'https://termine-kfz.lahn-dill-kreis.de/',
+                url: 'https://termine-kfz.lahn-dill-kreis.de/720183266/appointment/Index/1',
                 userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
         };
@@ -212,6 +221,72 @@ class ConfigService {
             logger.error('❌ Fehler beim Importieren der Konfiguration:', error);
             return false;
         }
+    }
+
+    // Website-spezifische Konfiguration
+    getWebsiteUrl() {
+        return this.config.website?.url || this.defaultConfig.website.url;
+    }
+
+    getUserAgent() {
+        return this.config.website?.userAgent || this.defaultConfig.website.userAgent;
+    }
+
+    getPuppeteerOptions() {
+        return { ...this.defaultConfig.puppeteerOptions, ...this.config.puppeteerOptions };
+    }
+
+    // Service-spezifische Konfiguration
+    getSelectedServices() {
+        return { ...this.defaultConfig.selectedServices, ...this.config.selectedServices };
+    }
+
+    updateSelectedServices(services) {
+        this.config.selectedServices = { ...this.config.selectedServices, ...services };
+        this.saveConfig();
+        logger.info('🛠️ Service-Auswahl aktualisiert:', services);
+    }
+
+    // Location-spezifische Konfiguration
+    getSelectedLocation() {
+        return { ...this.defaultConfig.selectedLocation, ...this.config.selectedLocation };
+    }
+
+    updateSelectedLocation(location) {
+        this.config.selectedLocation = { ...this.config.selectedLocation, ...location };
+        this.saveConfig();
+        logger.info('🏢 Standort-Auswahl aktualisiert:', location);
+    }
+
+    getLocationMapping() {
+        return {
+            '720': {
+                value: '720',
+                name: 'Kfz-Zulassung Wetzlar',
+                description: 'Hauptstelle der KFZ-Zulassung'
+            }
+            // Hier können weitere Standorte hinzugefügt werden
+        };
+    }
+
+    getServiceMapping() {
+        return {
+            neuzulassung: {
+                id: 'concern-41',
+                name: 'Neuzulassung',
+                description: 'Erstmalige Zulassung eines Fahrzeugs'
+            },
+            umschreibung: {
+                id: 'concern-45',
+                name: 'Umschreibung',
+                description: 'Änderung der Fahrzeugdaten oder des Halters'
+            },
+            ausfuhr: {
+                id: 'concern-47',
+                name: 'Ausfuhr',
+                description: 'Fahrzeugexport ins Ausland'
+            }
+        };
     }
 }
 

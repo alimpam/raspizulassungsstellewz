@@ -26,8 +26,19 @@ class TerminApp {
     }
 
     initializeMiddleware() {
-        // Sicherheit und Logging
-        this.app.use(helmet());
+        // Sicherheit und Logging mit angepasster CSP für Inline-Scripts und Event-Handler
+        this.app.use(helmet({
+            contentSecurityPolicy: {
+                directives: {
+                    defaultSrc: ["'self'"],
+                    scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+                    scriptSrcAttr: ["'unsafe-inline'"],
+                    styleSrc: ["'self'", "'unsafe-inline'"],
+                    imgSrc: ["'self'", "data:", "https:"],
+                    fontSrc: ["'self'"]
+                }
+            }
+        }));
         this.app.use(cors());
         this.app.use(morgan('combined', { stream: { write: message => logger.info(message.trim()) } }));
         this.app.use(express.json());
