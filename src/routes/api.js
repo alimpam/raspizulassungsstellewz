@@ -203,7 +203,85 @@ router.put('/url', (req, res) => {
     }
 });
 
-// Monitoring-Steuerung (entfernt - ersetzt durch kontinuierliche Überwachung)
+// Monitoring-Steuerung
+router.post('/monitoring/start', async (req, res) => {
+    try {
+        const { intervalMinutes = 5, intervalSeconds = 0 } = req.body;
+        
+        console.log('Monitoring-Start angefordert:', { intervalMinutes, intervalSeconds });
+        
+        // Validierung
+        if (intervalMinutes < 0 || intervalMinutes > 60 || intervalSeconds < 0 || intervalSeconds > 59) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Ungültiges Intervall' 
+            });
+        }
+        
+        const totalSeconds = intervalMinutes * 60 + intervalSeconds;
+        if (totalSeconds < 1) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Intervall muss mindestens 1 Sekunde betragen' 
+            });
+        }
+        
+        if (totalSeconds > 3600) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Intervall darf nicht mehr als 60 Minuten betragen' 
+            });
+        }
+        
+        // Prüfe ob bereits läuft
+        if (monitor.isRunning()) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Monitoring läuft bereits' 
+            });
+        }
+        
+        // Starte kontinuierliche Überwachung
+        await monitor.startContinuousMonitoring(intervalMinutes, intervalSeconds);
+        
+        res.json({ 
+            success: true, 
+            message: `Monitoring gestartet (${intervalMinutes}:${intervalSeconds.toString().padStart(2, '0')} Min)` 
+        });
+    } catch (error) {
+        console.error('Fehler beim Starten des Monitorings:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: error.message 
+        });
+    }
+});
+
+router.post('/monitoring/stop', async (req, res) => {
+    try {
+        console.log('Monitoring-Stop angefordert');
+        
+        if (!monitor.isRunning()) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Monitoring läuft nicht' 
+            });
+        }
+        
+        monitor.stopContinuousMonitoring();
+        
+        res.json({ 
+            success: true, 
+            message: 'Monitoring gestoppt' 
+        });
+    } catch (error) {
+        console.error('Fehler beim Stoppen des Monitorings:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: error.message 
+        });
+    }
+});
 
 // Überwachte Termine
 router.get('/dates', (req, res) => {
@@ -424,71 +502,78 @@ router.post('/monitoring/start', async (req, res) => {
     try {
         const { intervalMinutes = 5, intervalSeconds = 0 } = req.body;
         
-        // Validierung der Eingaben
+        console.log('Monitoring-Start angefordert:', { intervalMinutes, intervalSeconds });
+        
+        // Validierung
         if (intervalMinutes < 0 || intervalMinutes > 60 || intervalSeconds < 0 || intervalSeconds > 59) {
             return res.status(400).json({ 
-                error: 'Intervall muss zwischen 0:01 und 60:00 liegen' 
+                success: false, 
+                message: 'Ungültiges Intervall' 
             });
         }
         
         const totalSeconds = intervalMinutes * 60 + intervalSeconds;
-        
         if (totalSeconds < 1) {
             return res.status(400).json({ 
-                error: 'Intervall muss mindestens 1 Sekunde betragen' 
+                success: false, 
+                message: 'Intervall muss mindestens 1 Sekunde betragen' 
             });
         }
         
-        if (totalSeconds > 3600) { // 60 Minuten
+        if (totalSeconds > 3600) {
             return res.status(400).json({ 
-                error: 'Intervall darf nicht mehr als 60 Minuten betragen' 
+                success: false, 
+                message: 'Intervall darf nicht mehr als 60 Minuten betragen' 
             });
         }
-
+        
         // Prüfe ob bereits läuft
         if (monitor.isRunning()) {
             return res.status(400).json({ 
-                error: 'Monitoring läuft bereits' 
+                success: false, 
+                message: 'Monitoring läuft bereits' 
             });
         }
-
-        // Sofortige Antwort mit "initializing" Status
-        res.json({ 
-            message: `Kontinuierliche Überwachung wird gestartet (alle ${intervalMinutes}:${intervalSeconds.toString().padStart(2, '0')} Min)`,
-            intervalMinutes,
-            intervalSeconds,
-            totalSeconds,
-            status: {
-                isActive: true,
-                isInitializing: true,
-                message: 'Monitoring wird initialisiert...'
-            }
-        });
-
-        // Monitoring asynchron starten (nicht warten)
-        setTimeout(async () => {
-            try {
-                await monitor.startContinuousMonitoring(intervalMinutes, intervalSeconds);
-            } catch (error) {
-                console.error('Fehler beim asynchronen Monitoring-Start:', error);
-            }
-        }, 100);
         
+        // Starte kontinuierliche Überwachung
+        await monitor.startContinuousMonitoring(intervalMinutes, intervalSeconds);
+        
+        res.json({ 
+            success: true, 
+            message: `Monitoring gestartet (${intervalMinutes}:${intervalSeconds.toString().padStart(2, '0')} Min)` 
+        });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.error('Fehler beim Starten des Monitorings:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: error.message 
+        });
     }
 });
 
-// Kontinuierliche Überwachung stoppen
-router.post('/monitoring/stop', (req, res) => {
+router.post('/monitoring/stop', async (req, res) => {
     try {
+        console.log('Monitoring-Stop angefordert');
+        
+        if (!monitor.isRunning()) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Monitoring läuft nicht' 
+            });
+        }
+        
         monitor.stopContinuousMonitoring();
+        
         res.json({ 
-            message: 'Kontinuierliche Überwachung gestoppt',
-            status: monitor.getMonitoringStatus()
+            success: true, 
+            message: 'Monitoring gestoppt' 
         });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.error('Fehler beim Stoppen des Monitorings:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: error.message 
+        });
     }
 });
 

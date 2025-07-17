@@ -14,6 +14,7 @@ class AppointmentMonitor extends EventEmitter {
         this.targetUrl = this.configService.getWebsiteUrl();
         this.watchedDates = new Set();
         this.foundAppointments = new Set();
+        this.appointmentDetails = {}; // Speichere detaillierte Informationen über gefundene Termine
         this.monitoringInterval = null;
         this.consecutiveErrors = 0;
     }
@@ -131,9 +132,23 @@ class AppointmentMonitor extends EventEmitter {
 
             // Warten auf Kalender
             logger.info('⏳ Warte auf Kalender...');
-            await this.page.waitForSelector('.dx-calendar-caption-button .dx-button-text', {
-                timeout: puppeteerOptions.timeout
-            });
+            await this.page.waitForFunction(() => {
+                const selectors = [
+                    '.dx-calendar-caption-button .dx-button-text',
+                    '.dx-calendar-caption .dx-button-text',
+                    '.dx-calendar-navigator-caption .dx-button-text',
+                    '.calendar-month-year',
+                    '.month-year-display'
+                ];
+                
+                for (const selector of selectors) {
+                    const element = document.querySelector(selector);
+                    if (element && element.textContent.trim()) {
+                        return true;
+                    }
+                }
+                return false;
+            }, { timeout: puppeteerOptions.timeout });
 
             logger.info('✅ Browser für kontinuierliche Überwachung initialisiert');
             await this.takeScreenshot('continuous_monitoring_initialized');
@@ -148,7 +163,16 @@ class AppointmentMonitor extends EventEmitter {
     async takeScreenshot(name) {
         try {
             if (this.page) {
-                const screenshotPath = `debug_${name}_${Date.now()}.png`;
+                const fs = require('fs');
+                const path = require('path');
+                
+                // Sicherstellen, dass der logs Ordner existiert
+                const logsDir = path.join(__dirname, '..', 'logs');
+                if (!fs.existsSync(logsDir)) {
+                    fs.mkdirSync(logsDir, { recursive: true });
+                }
+                
+                const screenshotPath = path.join(logsDir, `debug_${name}_${Date.now()}.png`);
                 await this.page.screenshot({ path: screenshotPath, fullPage: true });
                 logger.info(`📸 Screenshot gespeichert: ${screenshotPath}`);
                 return screenshotPath;
@@ -206,7 +230,7 @@ class AppointmentMonitor extends EventEmitter {
             if (!nextButton) {
                 logger.error('❌ Weiter-Button nicht gefunden!');
                 // Screenshot für Debugging
-                await this.page.screenshot({ path: 'debug_no_next_button.png' });
+                await this.debugScreenshot('no_next_button', 'Weiter-Button nicht gefunden');
                 throw new Error('Weiter-Button nicht gefunden');
             }
             
@@ -234,9 +258,25 @@ class AppointmentMonitor extends EventEmitter {
             // Warten auf Kalender mit verbesserter Fehlerbehandlung
             logger.info('⏳ Warte auf Kalender...');
             try {
-                await this.page.waitForSelector('.dx-calendar-caption-button .dx-button-text', {
-                    timeout: puppeteerOptions.timeout
-                });
+                // Primärer Selector - erweiterte Suche
+                await this.page.waitForFunction(() => {
+                    const selectors = [
+                        '.dx-calendar-caption-button .dx-button-text',
+                        '.dx-calendar-caption .dx-button-text',
+                        '.dx-calendar-navigator-caption .dx-button-text',
+                        '.calendar-month-year',
+                        '.month-year-display'
+                    ];
+                    
+                    for (const selector of selectors) {
+                        const element = document.querySelector(selector);
+                        if (element && element.textContent.trim()) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }, { timeout: puppeteerOptions.timeout });
+                
                 logger.info('📅 Kalender geladen');
             } catch (error) {
                 logger.warn('⚠️ Kalender-Hauptselektor nicht gefunden - versuche alternative Selektoren...');
@@ -245,7 +285,9 @@ class AppointmentMonitor extends EventEmitter {
                     '.dx-calendar',
                     '.calendar',
                     '[data-calendar]',
-                    '.appointment-calendar'
+                    '.appointment-calendar',
+                    'table.dx-calendar-table',
+                    '.dx-calendar-body'
                 ];
                 
                 let calendarFound = false;
@@ -262,7 +304,13 @@ class AppointmentMonitor extends EventEmitter {
                 
                 if (!calendarFound) {
                     await this.debugScreenshot('calendar_not_found', 'Kalender nicht gefunden');
-                    throw new Error('Kalender konnte nicht geladen werden');
+                    // Noch ein letzter Versuch: Warte auf beliebige Tabelle
+                    try {
+                        await this.page.waitForSelector('table, .table', { timeout: 10000 });
+                        logger.info('📅 Kalender als Tabelle gefunden');
+                    } catch (tableError) {
+                        throw new Error('Kalender konnte nicht geladen werden');
+                    }
                 }
             }
 
@@ -317,9 +365,23 @@ class AppointmentMonitor extends EventEmitter {
             if (this.checkCount && this.checkCount % 3 === 0) {
                 logger.info('🔄 Refreshe Seite für bessere Stabilität...');
                 await this.page.reload({ waitUntil: 'networkidle0' });
-                await this.page.waitForSelector('.dx-calendar-caption-button .dx-button-text', {
-                    timeout: 30000
-                });
+                await this.page.waitForFunction(() => {
+                    const selectors = [
+                        '.dx-calendar-caption-button .dx-button-text',
+                        '.dx-calendar-caption .dx-button-text',
+                        '.dx-calendar-navigator-caption .dx-button-text',
+                        '.calendar-month-year',
+                        '.month-year-display'
+                    ];
+                    
+                    for (const selector of selectors) {
+                        const element = document.querySelector(selector);
+                        if (element && element.textContent.trim()) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }, { timeout: 30000 });
             }
             
             // Sortiere Termine nach Datum für effiziente Navigation
@@ -327,6 +389,8 @@ class AppointmentMonitor extends EventEmitter {
             logger.info(`📋 Sortierte Termine: ${sortedDates.join(', ')}`);
             
             const results = [];
+            let totalTimeSlots = 0;
+            
             for (let i = 0; i < sortedDates.length; i++) {
                 const dateStr = sortedDates[i];
                 logger.info(`🔍 Prüfe Termin ${i + 1}/${sortedDates.length}: ${dateStr}`);
@@ -334,7 +398,12 @@ class AppointmentMonitor extends EventEmitter {
                 const result = await this.checkSingleDate(dateStr);
                 results.push(result);
                 
-                logger.info(`✅ Ergebnis für ${dateStr}: ${result.available ? 'VERFÜGBAR' : 'nicht verfügbar'}`);
+                // Zeitslots zur Gesamtsumme hinzufügen
+                if (result.timeSlotsCount) {
+                    totalTimeSlots += result.timeSlotsCount;
+                }
+                
+                logger.info(`✅ Ergebnis für ${dateStr}: ${result.available ? 'VERFÜGBAR' : 'nicht verfügbar'} (${result.timeSlotsCount || 0} Zeitslots)`);
                 
                 // Längere Pause zwischen Terminprüfungen für bessere Stabilität
                 if (i < sortedDates.length - 1) {
@@ -350,6 +419,8 @@ class AppointmentMonitor extends EventEmitter {
             const availableDates = results.filter(r => r.available).map(r => r.date);
             
             logger.info(`✅ Terminprüfung abgeschlossen: ${availableCount}/${results.length} Termine verfügbar`);
+            logger.info(`⏰ Insgesamt ${totalTimeSlots} verfügbare Zeitslots gefunden`);
+            
             if (availableDates.length > 0) {
                 logger.info(`🎯 Verfügbare Termine: ${availableDates.join(', ')}`);
             }
@@ -597,18 +668,74 @@ class AppointmentMonitor extends EventEmitter {
                               !cellInfo.isOtherMonth &&
                               cellInfo.isClickable;
 
+            let availableTimeSlots = [];
+            
+            // Wenn der Termin verfügbar ist, klicke darauf und prüfe die Zeitslots
+            if (isAvailable) {
+                logger.info(`🔍 Termin ${germanDate} ist verfügbar - prüfe Zeitslots...`);
+                
+                try {
+                    // Auf die Termin-Zelle klicken
+                    await cell.click();
+                    
+                    // Warten auf die Tagesansicht
+                    await this.page.waitForSelector('table.table-sm', { timeout: 10000 });
+                    
+                    // Verfügbare Zeitslots extrahieren (btn-success Buttons)
+                    availableTimeSlots = await this.page.evaluate(() => {
+                        const successButtons = document.querySelectorAll('.btn-time-selector.btn-success');
+                        const timeSlots = [];
+                        
+                        successButtons.forEach(button => {
+                            const value = button.getAttribute('value');
+                            const text = button.textContent.trim();
+                            
+                            if (value && text) {
+                                timeSlots.push({
+                                    time: text,
+                                    value: value,
+                                    datetime: value
+                                });
+                            }
+                        });
+                        
+                        return timeSlots;
+                    });
+                    
+                    logger.info(`🎯 Gefundene Zeitslots für ${germanDate}: ${availableTimeSlots.length}`, 
+                        availableTimeSlots.map(slot => slot.time));
+                    
+                    // Zurück zur Kalenderansicht navigieren
+                    await this.page.goBack();
+                    await this.page.waitForSelector('.dx-calendar-caption-button .dx-button-text', { timeout: 10000 });
+                    
+                } catch (detailError) {
+                    logger.warn(`⚠️ Konnte Zeitslots für ${germanDate} nicht extrahieren:`, detailError);
+                    // Fallback: Zurück zur Kalenderansicht wenn möglich
+                    try {
+                        await this.page.goBack();
+                        await this.page.waitForSelector('.dx-calendar-caption-button .dx-button-text', { timeout: 5000 });
+                    } catch (backError) {
+                        logger.warn('⚠️ Konnte nicht zur Kalenderansicht zurückkehren:', backError);
+                    }
+                }
+            }
+
             const result = {
                 date: dateStr,
                 germanDate,
                 available: isAvailable,
                 classes: cellInfo.classes,
                 details: cellInfo,
+                availableTimeSlots: availableTimeSlots,
+                timeSlotsCount: availableTimeSlots.length,
                 timestamp: new Date().toISOString()
             };
 
             // Detailliertes Logging für Debugging
             logger.info(`🔍 Termin-Details für ${germanDate}:`, {
                 available: isAvailable,
+                timeSlotsCount: availableTimeSlots.length,
                 isGreen: cellInfo.isGreen,
                 hasAppointmentIndicator: cellInfo.hasAppointmentIndicator,
                 hasTimeText: cellInfo.hasTimeText,
@@ -626,6 +753,13 @@ class AppointmentMonitor extends EventEmitter {
             if (result.available && !this.foundAppointments.has(dateStr)) {
                 this.foundAppointments.add(dateStr);
                 
+                // Speichere detaillierte Informationen
+                this.appointmentDetails[dateStr] = {
+                    timeSlotsCount: result.timeSlotsCount,
+                    availableTimeSlots: result.availableTimeSlots,
+                    lastUpdated: new Date().toISOString()
+                };
+                
                 // Versuche zusätzliche Informationen zu extrahieren
                 const appointmentInfo = await this.extractAppointmentInfo(cell);
                 
@@ -635,14 +769,23 @@ class AppointmentMonitor extends EventEmitter {
                     url: this.targetUrl
                 });
                 
-                logger.info(`🎉 Verfügbarer Termin gefunden: ${germanDate}`);
+                logger.info(`🎉 Verfügbarer Termin gefunden: ${germanDate} mit ${availableTimeSlots.length} Zeitslots`);
             } else if (result.available) {
-                logger.info(`✅ Termin ${germanDate} weiterhin verfügbar`);
+                // Aktualisiere existierende Details
+                this.appointmentDetails[dateStr] = {
+                    timeSlotsCount: result.timeSlotsCount,
+                    availableTimeSlots: result.availableTimeSlots,
+                    lastUpdated: new Date().toISOString()
+                };
+                
+                logger.info(`✅ Termin ${germanDate} weiterhin verfügbar mit ${availableTimeSlots.length} Zeitslots`);
             } else {
+                // Entferne Details wenn nicht mehr verfügbar
+                delete this.appointmentDetails[dateStr];
                 logger.info(`❌ Termin ${germanDate} nicht verfügbar - Details: ${cellInfo.classes}`);
             }
 
-            logger.info(`📊 ${germanDate} - Verfügbar: ${result.available ? '✅' : '❌'}`);
+            logger.info(`📊 ${germanDate} - Verfügbar: ${result.available ? '✅' : '❌'} (${availableTimeSlots.length} Zeitslots)`);
             return result;
 
         } catch (error) {
@@ -659,13 +802,52 @@ class AppointmentMonitor extends EventEmitter {
             logger.info(`🎯 Navigiere zu Monat: ${targetMonth}/${targetYear}`);
 
             while (navigations < maxNavigations) {
-                // Aktuellen Monat ermitteln (wie im Tampermonkey-Script)
+                // Erweiterte Suche nach Kalender-Elementen
                 const currentMonth = await this.page.evaluate(() => {
-                    const caption = document.querySelector('.dx-calendar-caption-button .dx-button-text');
+                    // Verschiedene Selektoren für den Kalender-Header versuchen
+                    const selectors = [
+                        '.dx-calendar-caption-button .dx-button-text',
+                        '.dx-calendar-caption .dx-button-text',
+                        '.dx-calendar-navigator-caption .dx-button-text',
+                        '.calendar-month-year',
+                        '.month-year-display'
+                    ];
+                    
+                    let caption = null;
+                    for (const selector of selectors) {
+                        caption = document.querySelector(selector);
+                        if (caption) break;
+                    }
+                    
+                    if (!caption) {
+                        // Fallback: Suche nach Text-Pattern in allen Elementen
+                        const allElements = document.querySelectorAll('*');
+                        for (const el of allElements) {
+                            const text = el.textContent?.trim() || '';
+                            if (text.match(/^(Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+\d{4}$/)) {
+                                caption = el;
+                                break;
+                            }
+                        }
+                    }
+                    
                     if (!caption) return null;
                     
                     const text = caption.textContent.trim(); // z.B. "August 2025"
-                    const [monat, jahr] = text.split(' ');
+                    const parts = text.split(' ');
+                    
+                    if (parts.length !== 2) {
+                        // Versuche alternative Formate
+                        const altMatch = text.match(/(\w+)\s*(\d{4})/);
+                        if (altMatch) {
+                            parts[0] = altMatch[1];
+                            parts[1] = altMatch[2];
+                        } else {
+                            return null;
+                        }
+                    }
+                    
+                    const [monat, jahr] = parts;
                     
                     const monthMap = {
                         'Januar': '01', 'Februar': '02', 'März': '03', 'April': '04',
@@ -682,6 +864,15 @@ class AppointmentMonitor extends EventEmitter {
 
                 if (!currentMonth) {
                     logger.error('❌ Kann aktuellen Monat nicht ermitteln');
+                    // Debug: Verfügbare Elemente loggen
+                    await this.page.evaluate(() => {
+                        const elements = document.querySelectorAll('.dx-calendar *, .calendar *');
+                        console.log('Verfügbare Kalender-Elemente:', Array.from(elements).map(el => ({
+                            tag: el.tagName,
+                            class: el.className,
+                            text: el.textContent?.trim()
+                        })));
+                    });
                     throw new Error('Kann aktuellen Monat nicht ermitteln');
                 }
 
@@ -698,36 +889,98 @@ class AppointmentMonitor extends EventEmitter {
                     return true;
                 }
 
-                // Navigationsrichtung bestimmen (wie im Tampermonkey-Script)
+                // Navigationsrichtung bestimmen und Button suchen
+                let navigationButton = null;
+                
                 if (aktJahr > zielJ || (aktJahr === zielJ && aktMonat > zielM)) {
                     // Zurück navigieren
                     logger.info(`⬅️ Navigiere einen Monat zurück von ${currentMonth.text}`);
-                    const prevButton = await this.page.$('.dx-calendar-navigator-previous-month');
-                    if (prevButton) {
-                        await prevButton.click();
-                    } else {
-                        logger.error('❌ Vorheriger Monat Button nicht gefunden');
-                        throw new Error('Vorheriger Monat Button nicht gefunden');
+                    
+                    // Verschiedene Selektoren für den Zurück-Button versuchen
+                    const prevSelectors = [
+                        '.dx-calendar-navigator-previous-month',
+                        '.dx-calendar-navigator-previous',
+                        '.dx-calendar-prev-button',
+                        '.calendar-prev',
+                        '.prev-month',
+                        'button[aria-label*="previous"]',
+                        'button[aria-label*="vorherig"]'
+                    ];
+                    
+                    for (const selector of prevSelectors) {
+                        navigationButton = await this.page.$(selector);
+                        if (navigationButton) {
+                            logger.info(`✅ Zurück-Button gefunden: ${selector}`);
+                            break;
+                        }
                     }
+                    
                 } else if (aktJahr < zielJ || (aktJahr === zielJ && aktMonat < zielM)) {
                     // Vorwärts navigieren
                     logger.info(`➡️ Navigiere einen Monat vor von ${currentMonth.text}`);
-                    const nextButton = await this.page.$('.dx-calendar-navigator-next-month');
-                    if (nextButton) {
-                        await nextButton.click();
-                    } else {
-                        logger.error('❌ Nächster Monat Button nicht gefunden');
-                        throw new Error('Nächster Monat Button nicht gefunden');
+                    
+                    // Verschiedene Selektoren für den Vor-Button versuchen
+                    const nextSelectors = [
+                        '.dx-calendar-navigator-next-month',
+                        '.dx-calendar-navigator-next',
+                        '.dx-calendar-next-button',
+                        '.calendar-next',
+                        '.next-month',
+                        'button[aria-label*="next"]',
+                        'button[aria-label*="nächst"]'
+                    ];
+                    
+                    for (const selector of nextSelectors) {
+                        navigationButton = await this.page.$(selector);
+                        if (navigationButton) {
+                            logger.info(`✅ Vor-Button gefunden: ${selector}`);
+                            break;
+                        }
                     }
                 }
 
-                // Warten bis Navigation abgeschlossen (wie im Tampermonkey-Script)
-                await new Promise(resolve => setTimeout(resolve, 800));
+                if (!navigationButton) {
+                    logger.error('❌ Navigations-Button nicht gefunden');
+                    // Debug: Verfügbare Buttons loggen
+                    await this.page.evaluate(() => {
+                        const buttons = document.querySelectorAll('button, .btn, [role="button"]');
+                        console.log('Verfügbare Buttons:', Array.from(buttons).map(btn => ({
+                            tag: btn.tagName,
+                            class: btn.className,
+                            text: btn.textContent?.trim(),
+                            ariaLabel: btn.getAttribute('aria-label')
+                        })));
+                    });
+                    throw new Error('Navigations-Button nicht gefunden');
+                }
+
+                // Button klicken
+                await navigationButton.click();
+
+                // Warten bis Navigation abgeschlossen - erweiterte Wartezeit
+                await new Promise(resolve => setTimeout(resolve, 1200));
                 
-                // Warten bis der neue Monat geladen ist
-                await this.page.waitForSelector('.dx-calendar-caption-button .dx-button-text', {
-                    timeout: 5000
-                });
+                // Warten bis der neue Monat geladen ist - mit mehreren Versuchen
+                let monthUpdated = false;
+                for (let attempt = 0; attempt < 3; attempt++) {
+                    try {
+                        await this.page.waitForFunction(() => {
+                            const caption = document.querySelector('.dx-calendar-caption-button .dx-button-text') ||
+                                           document.querySelector('.dx-calendar-caption .dx-button-text');
+                            return caption && caption.textContent.trim() !== '';
+                        }, { timeout: 3000 });
+                        
+                        monthUpdated = true;
+                        break;
+                    } catch (waitError) {
+                        logger.warn(`⚠️ Warte-Versuch ${attempt + 1}/3 für Monats-Update fehlgeschlagen`);
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                }
+                
+                if (!monthUpdated) {
+                    logger.warn('⚠️ Monat-Update nicht bestätigt, versuche trotzdem weiter');
+                }
                 
                 navigations++;
                 
@@ -803,7 +1056,16 @@ class AppointmentMonitor extends EventEmitter {
     async createScreenshot(name, description) {
         try {
             if (this.page) {
-                const screenshotPath = `debug_${name}_${Date.now()}.png`;
+                const fs = require('fs');
+                const path = require('path');
+                
+                // Sicherstellen, dass der logs Ordner existiert
+                const logsDir = path.join(__dirname, '..', 'logs');
+                if (!fs.existsSync(logsDir)) {
+                    fs.mkdirSync(logsDir, { recursive: true });
+                }
+                
+                const screenshotPath = path.join(logsDir, `debug_${name}_${Date.now()}.png`);
                 await this.page.screenshot({ path: screenshotPath, fullPage: true });
                 logger.info(`📸 Screenshot gespeichert: ${screenshotPath} - ${description}`);
                 return screenshotPath;
@@ -815,27 +1077,22 @@ class AppointmentMonitor extends EventEmitter {
 
     async debugScreenshot(name, description) {
         try {
-            const filename = `debug_${name}_${Date.now()}.png`;
+            const fs = require('fs');
+            const path = require('path');
+            
+            // Sicherstellen, dass der logs Ordner existiert
+            const logsDir = path.join(__dirname, '..', 'logs');
+            if (!fs.existsSync(logsDir)) {
+                fs.mkdirSync(logsDir, { recursive: true });
+            }
+            
+            const filename = path.join(logsDir, `debug_${name}_${Date.now()}.png`);
             await this.page.screenshot({ path: filename, fullPage: true });
             logger.info(`📸 Screenshot gespeichert: ${filename} - ${description}`);
             return filename;
         } catch (error) {
             logger.warn(`⚠️ Screenshot konnte nicht erstellt werden: ${error.message}`);
             return null;
-        }
-    }
-
-    // Debug-Hilfsfunktionen
-    async takeScreenshot(name) {
-        try {
-            if (this.page) {
-                const screenshotPath = `debug_${name}_${Date.now()}.png`;
-                await this.page.screenshot({ path: screenshotPath, fullPage: true });
-                logger.info(`📸 Screenshot gespeichert: ${screenshotPath}`);
-                return screenshotPath;
-            }
-        } catch (error) {
-            logger.warn(`⚠️ Fehler beim Erstellen des Screenshots ${name}:`, error);
         }
     }
 
@@ -1050,6 +1307,23 @@ class AppointmentMonitor extends EventEmitter {
         const isInitializing = this.monitoringInterval === 'initializing';
         const isActive = !!this.monitoringInterval && this.monitoringInterval !== null;
         
+        // Berechne Gesamtanzahl der verfügbaren Zeitslots
+        let totalTimeSlots = 0;
+        const foundAppointmentsWithDetails = [];
+        
+        for (const dateStr of this.foundAppointments) {
+            // Versuche gespeicherte Zeitslot-Informationen zu finden
+            const appointmentData = this.appointmentDetails && this.appointmentDetails[dateStr];
+            const timeSlotsCount = appointmentData ? appointmentData.timeSlotsCount || 0 : 0;
+            
+            totalTimeSlots += timeSlotsCount;
+            foundAppointmentsWithDetails.push({
+                date: dateStr,
+                timeSlotsCount: timeSlotsCount,
+                availableTimeSlots: appointmentData ? appointmentData.availableTimeSlots || [] : []
+            });
+        }
+        
         // Erweiterte Browser-Status-Prüfung
         let browserActive = false;
         try {
@@ -1065,6 +1339,8 @@ class AppointmentMonitor extends EventEmitter {
             lastCheckTime: this.lastCheckTime,
             consecutiveErrors: this.consecutiveErrors || 0,
             foundAppointments: Array.from(this.foundAppointments || []),
+            foundAppointmentsWithDetails: foundAppointmentsWithDetails,
+            totalTimeSlots: totalTimeSlots,
             checkCount: this.checkCount || 0,
             browserActive: browserActive,
             targetUrl: this.targetUrl,
@@ -1106,6 +1382,8 @@ class AppointmentMonitor extends EventEmitter {
         for (const foundDate of this.foundAppointments) {
             if (!monitoredSet.has(foundDate)) {
                 this.foundAppointments.delete(foundDate);
+                // Entferne auch die Details
+                delete this.appointmentDetails[foundDate];
                 logger.info(`🗑️ Gefundener Termin entfernt (nicht mehr überwacht): ${foundDate}`);
             }
         }
@@ -1119,84 +1397,53 @@ class AppointmentMonitor extends EventEmitter {
     // Robuste Browser-Wiederherstellung
     async ensureBrowserIsActive() {
         try {
-            // Prüfe Browser-Instanz
-            if (!this.browser) {
-                logger.warn('⚠️ Browser-Instanz nicht vorhanden, initialisiere neu...');
-                await this.initializeForContinuousMonitoring();
+            // Prüfe ob Browser und Page existieren
+            if (!this.browser || !this.page) {
+                logger.info('🔄 Browser oder Page nicht vorhanden, initialisiere neu...');
+                await this.initialize();
                 return;
             }
 
             // Prüfe ob Browser noch läuft
-            let browserConnected = false;
-            try {
-                await this.browser.version();
-                browserConnected = true;
-            } catch (error) {
-                logger.warn('⚠️ Browser-Verbindung verloren:', error.message);
-                browserConnected = false;
-            }
-
-            if (!browserConnected) {
-                logger.warn('⚠️ Browser ist nicht mehr erreichbar, starte neu...');
-                await this.cleanupBrowser();
-                await this.initializeForContinuousMonitoring();
-                return;
-            }
-
-            // Prüfe Page-Instanz
-            if (!this.page) {
-                logger.warn('⚠️ Page-Instanz nicht vorhanden, erstelle neue...');
-                await this.initializeForContinuousMonitoring();
-                return;
-            }
-
-            // Prüfe ob Page noch läuft
-            let pageActive = false;
-            try {
-                pageActive = !this.page.isClosed();
-                if (pageActive) {
-                    // Teste ob Page noch reagiert
-                    await this.page.evaluate(() => document.title);
+            if (this.browser.isConnected && this.browser.isConnected()) {
+                // Browser läuft, prüfe Page
+                try {
+                    if (this.page.isClosed()) {
+                        logger.info('🔄 Page ist geschlossen, erstelle neue Page...');
+                        this.page = await this.browser.newPage();
+                        await this.page.setUserAgent(this.configService.getUserAgent());
+                        await this.page.setViewport({ width: 1920, height: 1080 });
+                        await this.page.setExtraHTTPHeaders({
+                            'Accept-Language': 'de-DE,de;q=0.9,en;q=0.8'
+                        });
+                        await this.page.emulateTimezone('Europe/Berlin');
+                    } else {
+                        // Page ist aktiv, teste mit einfacher Evaluation
+                        await this.page.evaluate(() => document.title);
+                        logger.debug('✅ Browser und Page sind aktiv');
+                    }
+                } catch (pageError) {
+                    logger.warn('⚠️ Page-Test fehlgeschlagen, erstelle neue Page:', pageError);
+                    try {
+                        this.page = await this.browser.newPage();
+                        await this.page.setUserAgent(this.configService.getUserAgent());
+                        await this.page.setViewport({ width: 1920, height: 1080 });
+                        await this.page.setExtraHTTPHeaders({
+                            'Accept-Language': 'de-DE,de;q=0.9,en;q=0.8'
+                        });
+                        await this.page.emulateTimezone('Europe/Berlin');
+                    } catch (newPageError) {
+                        logger.error('❌ Konnte keine neue Page erstellen:', newPageError);
+                        throw newPageError;
+                    }
                 }
-            } catch (error) {
-                logger.warn('⚠️ Page ist nicht mehr aktiv:', error.message);
-                pageActive = false;
+            } else {
+                throw new Error('Browser nicht mehr verbunden');
             }
-
-            if (!pageActive) {
-                logger.warn('⚠️ Page ist geschlossen oder nicht mehr aktiv, reinitialisiere...');
-                await this.initializeForContinuousMonitoring();
-                return;
-            }
-
-            // Prüfe ob die richtige Seite geladen ist
-            try {
-                const currentUrl = await this.page.url();
-                if (!currentUrl.includes('termine-kfz.lahn-dill-kreis.de')) {
-                    logger.warn('⚠️ Falsche Seite geladen, navigiere zur Terminseite...');
-                    await this.initializeForContinuousMonitoring();
-                    return;
-                }
-
-                // Prüfe ob der Kalender noch vorhanden ist
-                const calendarExists = await this.page.$('.dx-calendar-caption-button .dx-button-text');
-                if (!calendarExists) {
-                    logger.warn('⚠️ Kalender nicht mehr vorhanden, reinitialisiere...');
-                    await this.initializeForContinuousMonitoring();
-                    return;
-                }
-
-                logger.info('✅ Browser und Page sind aktiv und bereit');
-            } catch (error) {
-                logger.warn('⚠️ Fehler beim Prüfen der Seite:', error.message);
-                await this.initializeForContinuousMonitoring();
-            }
-
         } catch (error) {
-            logger.error('❌ Fehler bei der Browser-Wiederherstellung:', error);
-            // Fallback: Komplett neu initialisieren
-            await this.cleanupBrowser();
-            await this.initializeForContinuousMonitoring();
+            logger.warn('⚠️ Browser-Verbindung verloren, initialisiere komplett neu:', error);
+            await this.cleanup();
+            await this.initialize();
         }
     }
 
@@ -1231,6 +1478,15 @@ class AppointmentMonitor extends EventEmitter {
             // Forciere Null-Setzen
             this.page = null;
             this.browser = null;
+        }
+    }
+
+    // Prüfe Browser-Status
+    isBrowserActive() {
+        try {
+            return !!(this.browser && this.page && !this.page.isClosed() && this.browser.isConnected());
+        } catch (error) {
+            return false;
         }
     }
 }
