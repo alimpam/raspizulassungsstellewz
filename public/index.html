@@ -900,6 +900,9 @@
                 const response = await fetch('/api/dates');
                 const dates = await response.json();
                 
+                // Update systemData.dates so the counter logic works
+                systemData.dates = dates;
+                
                 // Zusätzlich detaillierte Monitoring-Informationen laden
                 const monitoringResponse = await fetch('/api/monitoring/status');
                 let monitoringData = {};
@@ -940,6 +943,10 @@
                     
                     dateList.appendChild(li);
                 });
+                
+                // Update the statistics after loading dates
+                updateStatusUI();
+                
             } catch (error) {
                 console.error('Fehler beim Laden der Termine:', error);
                 showAlert('Fehler beim Laden der Termine', 'danger');
