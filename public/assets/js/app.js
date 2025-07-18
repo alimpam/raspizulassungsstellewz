@@ -391,6 +391,10 @@ class App {
             }
             
             this.updateStatusUI();
+            
+            // Update UI manager with system data
+            uiManager.systemData = this.systemData;
+            uiManager.updateMonitoringStatus();
         } catch (error) {
             console.error('Error loading system status:', error);
             uiManager.showAlert('Fehler beim Laden des System-Status', 'danger');
@@ -452,17 +456,18 @@ class App {
 
         // Toggle button text
         const toggleText = document.getElementById('toggleText');
+        const toggleButton = document.querySelector('button[onclick="toggleMonitoring()"]');
+        
         if (toggleText) {
             const monitoring = this.systemData.detailedMonitoring || this.systemData.monitoring;
             const isActive = monitoring?.isActive;
-            const isInitializing = monitoring?.isInitializing;
             
-            if (isActive && isInitializing) {
-                toggleText.textContent = 'Monitoring starten (läuft...)';
-            } else if (isActive) {
+            if (isActive) {
                 toggleText.textContent = 'Monitoring stoppen';
+                if (toggleButton) toggleButton.disabled = false;
             } else {
                 toggleText.textContent = 'Monitoring starten';
+                if (toggleButton) toggleButton.disabled = false;
             }
         }
 
@@ -673,14 +678,27 @@ class App {
      * Toggle monitoring
      */
     async toggleMonitoring() {
-        // Get current status first
-        const statusResponse = await fetch('/api/monitoring/status');
-        const statusData = await statusResponse.json();
+        // Prevent double-clicks by disabling the button
+        const toggleButton = document.querySelector('button[onclick="toggleMonitoring()"]');
+        const toggleText = document.getElementById('toggleText');
         
-        const isRunning = statusData.isActive;
-        const endpoint = isRunning ? '/api/monitoring/stop' : '/api/monitoring/start';
+        if (toggleButton && toggleButton.disabled) {
+            return; // Already processing
+        }
+        
+        if (toggleButton) {
+            toggleButton.disabled = true;
+            if (toggleText) toggleText.textContent = 'Verarbeitung...';
+        }
         
         try {
+            // Get current status first
+            const statusResponse = await fetch('/api/monitoring/status');
+            const statusData = await statusResponse.json();
+            
+            const isRunning = statusData.isActive;
+            const endpoint = isRunning ? '/api/monitoring/stop' : '/api/monitoring/start';
+        
             let requestBody = {};
             if (!isRunning) {
                 // Read interval from input field when starting
@@ -693,6 +711,8 @@ class App {
                 
                 if (!match) {
                     uiManager.showAlert('Ungültiges Intervall-Format. Bitte verwenden Sie MM:SS (z.B. 5:00)', 'danger');
+                    if (toggleButton) toggleButton.disabled = false;
+                    if (toggleText) toggleText.textContent = 'Monitoring starten';
                     return;
                 }
                 
@@ -702,6 +722,8 @@ class App {
                 // Validate values
                 if (minutes < 0 || minutes > 60 || seconds < 0 || seconds > 59) {
                     uiManager.showAlert('Intervall muss zwischen 0:01 und 60:00 liegen', 'danger');
+                    if (toggleButton) toggleButton.disabled = false;
+                    if (toggleText) toggleText.textContent = 'Monitoring starten';
                     return;
                 }
                 
@@ -709,31 +731,20 @@ class App {
                 
                 if (totalSeconds < 1) {
                     uiManager.showAlert('Intervall muss mindestens 1 Sekunde betragen', 'danger');
+                    if (toggleButton) toggleButton.disabled = false;
+                    if (toggleText) toggleText.textContent = 'Monitoring starten';
                     return;
                 }
                 
                 if (totalSeconds > 3600) { // 60 minutes
                     uiManager.showAlert('Intervall darf nicht mehr als 60 Minuten betragen', 'danger');
+                    if (toggleButton) toggleButton.disabled = false;
+                    if (toggleText) toggleText.textContent = 'Monitoring starten';
                     return;
                 }
                 
                 requestBody.intervalMinutes = minutes;
                 requestBody.intervalSeconds = seconds;
-                
-                // Update UI immediately when starting
-                const monitoringStatus = document.getElementById('monitoringStatus');
-                const monitoringText = document.getElementById('monitoringText');
-                const toggleText = document.getElementById('toggleText');
-                
-                if (monitoringStatus && monitoringText) {
-                    monitoringStatus.className = 'status-dot status-warning';
-                    monitoringText.innerHTML = `Monitoring wird gestartet...<br>
-                        <small>Browser wird initialisiert</small>`;
-                }
-                
-                if (toggleText) {
-                    toggleText.textContent = 'Monitoring starten (läuft...)';
-                }
             }
             
             const response = await fetch(endpoint, {
@@ -766,42 +777,17 @@ class App {
                 }
             } else {
                 uiManager.showAlert(result.error || 'Fehler beim Steuern des Monitorings', 'danger');
-                
-                // On error: reset UI to inactive
-                if (!isRunning) {
-                    const monitoringStatus = document.getElementById('monitoringStatus');
-                    const monitoringText = document.getElementById('monitoringText');
-                    const toggleText = document.getElementById('toggleText');
-                    
-                    if (monitoringStatus && monitoringText) {
-                        monitoringStatus.className = 'status-dot status-inactive';
-                        monitoringText.textContent = 'Monitoring inaktiv';
-                    }
-                    
-                    if (toggleText) {
-                        toggleText.textContent = 'Monitoring starten';
-                    }
-                }
             }
         } catch (error) {
             console.error('Error toggling monitoring:', error);
             uiManager.showAlert('Fehler beim Steuern des Monitorings', 'danger');
-            
-            // On error: reset UI to inactive
-            if (!isRunning) {
-                const monitoringStatus = document.getElementById('monitoringStatus');
-                const monitoringText = document.getElementById('monitoringText');
-                const toggleText = document.getElementById('toggleText');
-                
-                if (monitoringStatus && monitoringText) {
-                    monitoringStatus.className = 'status-dot status-inactive';
-                    monitoringText.textContent = 'Monitoring inaktiv';
-                }
-                
-                if (toggleText) {
-                    toggleText.textContent = 'Monitoring starten';
-                }
+        } finally {
+            // Re-enable button and update text
+            if (toggleButton) {
+                toggleButton.disabled = false;
             }
+            // Status and text will be updated by loadSystemStatus()
+            await this.loadSystemStatus();
         }
     }
 
@@ -846,7 +832,18 @@ class App {
     /**
      * Update services
      */
+    /**
+     * Update services
+     */
     async updateServices() {
+        // Check if monitoring is active
+        const monitoring = this.systemData?.detailedMonitoring || this.systemData?.monitoring;
+        if (monitoring && monitoring.isActive) {
+            uiManager.showAlert('Service-Auswahl ist gesperrt während das Monitoring läuft', 'warning');
+            this.loadServices(); // Reset checkboxes to previous state
+            return;
+        }
+        
         const services = {
             neuzulassung: document.getElementById('service-neuzulassung').checked,
             umschreibung: document.getElementById('service-umschreibung').checked,
@@ -888,6 +885,14 @@ class App {
      * Update location
      */
     async updateLocation() {
+        // Check if monitoring is active
+        const monitoring = this.systemData?.detailedMonitoring || this.systemData?.monitoring;
+        if (monitoring && monitoring.isActive) {
+            uiManager.showAlert('Standort-Auswahl ist gesperrt während das Monitoring läuft', 'warning');
+            this.loadLocation(); // Reset select to previous state
+            return;
+        }
+        
         const locationSelect = document.getElementById('locationSelect');
         const selectedValue = locationSelect.value;
         const selectedText = locationSelect.options[locationSelect.selectedIndex].text;

@@ -167,10 +167,18 @@ body {
 }
 
 .btn:disabled {
-    background: #6c757d;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
+    background-color: #6c757d !important;
+    border-color: #6c757d !important;
+    color: #fff !important;
+    cursor: not-allowed !important;
+    opacity: 0.65;
+    pointer-events: none;
+}
+
+.btn:disabled:hover {
+    background-color: #6c757d !important;
+    border-color: #6c757d !important;
+    transform: none !important;
 }
 
 .btn-success {
@@ -594,6 +602,24 @@ select.form-control {
 .status-indicator.initializing {
     background: #cce5ff;
     border-left: 4px solid #007bff;
+}
+
+/* Monitoring warning styles */
+.monitoring-warning {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+    border: 1px solid #ffc107;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-top: 12px;
+    font-size: 0.85em;
+    color: #856404;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.monitoring-warning strong {
+    color: #856404;
 }
 
 /* Improved date input with clickable calendar */

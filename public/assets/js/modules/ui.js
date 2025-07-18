@@ -66,6 +66,7 @@ class UIManager {
         this.updateTargetUrl();
         this.updateStatistics();
         this.updateSoundStatus();
+        this.updateConfigurationControls();
     }
 
     /**
@@ -113,6 +114,9 @@ class UIManager {
                 statusDetails.textContent = 'Klicken Sie auf "Monitoring starten" um zu beginnen';
             }
         }
+        
+        // Update configuration controls based on monitoring status
+        this.updateConfigurationControls();
     }
 
     /**
@@ -378,6 +382,76 @@ class UIManager {
                 </div>
             `;
         }).join('');
+    }
+
+    /**
+     * Update configuration controls based on monitoring status
+     */
+    updateConfigurationControls() {
+        const monitoring = this.systemData.detailedMonitoring || this.systemData.monitoring;
+        const isMonitoringActive = monitoring && monitoring.isActive;
+        
+        // Service checkboxes
+        const serviceCheckboxes = [
+            document.getElementById('service-neuzulassung'),
+            document.getElementById('service-umschreibung'),
+            document.getElementById('service-ausfuhr')
+        ];
+        
+        // Location select
+        const locationSelect = document.getElementById('locationSelect');
+        
+        // Disable/enable service checkboxes
+        serviceCheckboxes.forEach(checkbox => {
+            if (checkbox) {
+                checkbox.disabled = isMonitoringActive;
+                checkbox.style.opacity = isMonitoringActive ? '0.5' : '1';
+            }
+        });
+        
+        // Disable/enable location select
+        if (locationSelect) {
+            locationSelect.disabled = isMonitoringActive;
+            locationSelect.style.opacity = isMonitoringActive ? '0.5' : '1';
+        }
+        
+        // Update service selection container to show warning when disabled
+        const serviceSelection = document.getElementById('serviceSelection');
+        if (serviceSelection) {
+            let warningDiv = serviceSelection.querySelector('.monitoring-warning');
+            
+            if (isMonitoringActive) {
+                if (!warningDiv) {
+                    warningDiv = document.createElement('div');
+                    warningDiv.className = 'monitoring-warning';
+                    warningDiv.innerHTML = '⚠️ <strong>Service-Auswahl ist gesperrt</strong><br>Stoppen Sie das Monitoring, um Änderungen vorzunehmen.';
+                    serviceSelection.appendChild(warningDiv);
+                }
+            } else {
+                if (warningDiv) {
+                    warningDiv.remove();
+                }
+            }
+        }
+        
+        // Update location selection container to show warning when disabled
+        const locationSelection = document.getElementById('locationSelection');
+        if (locationSelection) {
+            let warningDiv = locationSelection.querySelector('.monitoring-warning');
+            
+            if (isMonitoringActive) {
+                if (!warningDiv) {
+                    warningDiv = document.createElement('div');
+                    warningDiv.className = 'monitoring-warning';
+                    warningDiv.innerHTML = '⚠️ <strong>Standort-Auswahl ist gesperrt</strong><br>Stoppen Sie das Monitoring, um Änderungen vorzunehmen.';
+                    locationSelection.appendChild(warningDiv);
+                }
+            } else {
+                if (warningDiv) {
+                    warningDiv.remove();
+                }
+            }
+        }
     }
 }
 
