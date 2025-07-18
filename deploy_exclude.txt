@@ -1,0 +1,9 @@
+node_modules
+.git
+.DS_Store
+*.log
+deploy*.sh
+deploy*.bat
+.gitignore
+README.md
+temp_deploy

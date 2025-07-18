@@ -26,19 +26,41 @@ class TerminApp {
     }
 
     initializeMiddleware() {
-        // Sicherheit und Logging mit angepasster CSP für Inline-Scripts und Event-Handler
-        this.app.use(helmet({
-            contentSecurityPolicy: {
-                directives: {
-                    defaultSrc: ["'self'"],
-                    scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-                    scriptSrcAttr: ["'unsafe-inline'"],
-                    styleSrc: ["'self'", "'unsafe-inline'"],
-                    imgSrc: ["'self'", "data:", "https:"],
-                    fontSrc: ["'self'"]
+        // Prüfe ob es sich um eine Entwicklungsumgebung handelt
+        const isDevelopment = process.env.NODE_ENV !== 'production';
+        
+        // Sicherheit und Logging - Für HTTP-Entwicklung angepasst
+        if (isDevelopment) {
+            // Minimale Sicherheitsheader für HTTP-Entwicklung
+            this.app.use(helmet({
+                contentSecurityPolicy: false, // CSP komplett deaktivieren für HTTP
+                crossOriginOpenerPolicy: false, // COOP deaktivieren
+                crossOriginResourcePolicy: false, // CORP deaktivieren  
+                originAgentCluster: false, // Origin-Agent-Cluster deaktivieren
+                hsts: false, // HSTS für HTTP deaktivieren
+                noSniff: false, // X-Content-Type-Options deaktivieren
+                frameguard: false, // X-Frame-Options deaktivieren
+                dnsPrefetchControl: false, // DNS Prefetch Control deaktivieren
+                ieNoOpen: false, // IE noopen deaktivieren
+                permittedCrossDomainPolicies: false, // Cross Domain Policies deaktivieren
+                referrerPolicy: false, // Referrer Policy deaktivieren
+                xssFilter: false // XSS Filter deaktivieren
+            }));
+        } else {
+            // Volle Sicherheitsheader für Produktion
+            this.app.use(helmet({
+                contentSecurityPolicy: {
+                    directives: {
+                        defaultSrc: ["'self'"],
+                        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+                        scriptSrcAttr: ["'unsafe-inline'"],
+                        styleSrc: ["'self'", "'unsafe-inline'"],
+                        imgSrc: ["'self'", "data:", "https:"],
+                        fontSrc: ["'self'"]
+                    }
                 }
-            }
-        }));
+            }));
+        }
         this.app.use(cors());
         this.app.use(morgan('combined', { stream: { write: message => logger.info(message.trim()) } }));
         this.app.use(express.json());
@@ -131,9 +153,11 @@ class TerminApp {
     }
 
     start() {
-        this.app.listen(this.port, () => {
+        const host = process.env.HOST || '0.0.0.0'; // Listen on all interfaces
+        this.app.listen(this.port, host, () => {
             logger.info(`🚀 Server läuft auf Port ${this.port}`);
             logger.info(`📱 Web-Interface: http://localhost:${this.port}`);
+            logger.info(`🌐 Netzwerk-Zugriff: http://${host === '0.0.0.0' ? '[IP-ADRESSE]' : host}:${this.port}`);
             logger.info(`🔍 API-Dokumentation: http://localhost:${this.port}/api`);
             
             // Monitoring automatisch starten, wenn konfiguriert
