@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frontend Module Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 4px; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .test-button { margin: 5px; padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .test-button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Frontend Module Test Page</h1>
+    <div id="test-results"></div>
+    
+    <h2>Module Loading Tests</h2>
+    <button class="test-button" onclick="testModuleLoading()">Test Module Loading</button>
+    
+    <h2>Global Function Tests</h2>
+    <button class="test-button" onclick="testGlobalFunctions()">Test Global Functions</button>
+    
+    <h2>API Communication Tests</h2>
+    <button class="test-button" onclick="testAPIFunctions()">Test API Functions</button>
+    
+    <!-- Load all modules in the same order as the main app -->
+    <script src="assets/js/sound.js"></script>
+    <script src="assets/js/modules/api.js"></script>
+    <script src="assets/js/modules/audio.js"></script>
+    <script src="assets/js/modules/ui.js"></script>
+    <script src="assets/js/modules/data.js"></script>
+    <script src="assets/js/modules/events.js"></script>
+    <script src="assets/js/app.js"></script>
+    
+    <script>
+        function addTestResult(message, isSuccess = true) {
+            const resultsDiv = document.getElementById('test-results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `test-result ${isSuccess ? 'success' : 'error'}`;
+            resultDiv.textContent = `${isSuccess ? '✅' : '❌'} ${message}`;
+            resultsDiv.appendChild(resultDiv);
+        }
+        
+        function testModuleLoading() {
+            document.getElementById('test-results').innerHTML = '<h3>Testing Module Loading...</h3>';
+            
+            // Test if all global instances are available
+            const modules = [
+                { name: 'apiClient', instance: window.apiClient },
+                { name: 'audioManager', instance: window.audioManager },
+                { name: 'uiManager', instance: window.uiManager },
+                { name: 'dataManager', instance: window.dataManager },
+                { name: 'appointmentEventManager', instance: window.appointmentEventManager },
+                { name: 'app', instance: window.app },
+                { name: 'notificationSounds', instance: window.notificationSounds }
+            ];
+            
+            modules.forEach(module => {
+                if (module.instance) {
+                    addTestResult(`${module.name} loaded successfully`);
+                } else {
+                    addTestResult(`${module.name} failed to load`, false);
+                }
+            });
+        }
+        
+        function testGlobalFunctions() {
+            document.getElementById('test-results').innerHTML = '<h3>Testing Global Functions...</h3>';
+            
+            const functions = [
+                'addDate', 'removeDate', 'checkNow', 'toggleMonitoring',
+                'updateTargetUrl', 'testNotification', 'updateServices',
+                'updateLocation', 'testNotificationSound', 'testAppointmentEvent',
+                'playNotificationSequence', 'createFallbackBeep'
+            ];
+            
+            functions.forEach(funcName => {
+                if (typeof window[funcName] === 'function') {
+                    addTestResult(`Function ${funcName} is available`);
+                } else {
+                    addTestResult(`Function ${funcName} is missing`, false);
+                }
+            });
+        }
+        
+        async function testAPIFunctions() {
+            document.getElementById('test-results').innerHTML = '<h3>Testing API Functions...</h3>';
+            
+            if (!window.apiClient) {
+                addTestResult('API Client not available', false);
+                return;
+            }
+            
+            // Test API methods exist
+            const apiMethods = [
+                'getSystemStatus', 'getMonitoringStatus', 'getDates',
+                'addDate', 'removeDate', 'startMonitoring', 'stopMonitoring',
+                'checkAppointments', 'testNotification'
+            ];
+            
+            apiMethods.forEach(method => {
+                if (typeof apiClient[method] === 'function') {
+                    addTestResult(`API method ${method} exists`);
+                } else {
+                    addTestResult(`API method ${method} missing`, false);
+                }
+            });
+        }
+        
+        // Test initialization
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(() => {
+                addTestResult('DOM loaded and modules initialized');
+                
+                // Check if app is initialized
+                if (app && app.isInitialized) {
+                    addTestResult('App successfully initialized');
+                } else {
+                    addTestResult('App initialization pending...');
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
