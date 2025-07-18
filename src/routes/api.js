@@ -19,6 +19,8 @@ router.get('/', (req, res) => {
             'GET /api/status': 'System-Status anzeigen',
             'GET /api/config': 'Konfiguration anzeigen',
             'PUT /api/config': 'Konfiguration aktualisieren',
+            'GET /api/debug': 'Debug-Einstellungen anzeigen',
+            'PUT /api/debug': 'Debug-Einstellungen aktualisieren',
             'GET /api/services': 'Verfügbare Dienste anzeigen',
             'PUT /api/services': 'Ausgewählte Dienste aktualisieren',
             'GET /api/location': 'Standort-Auswahl anzeigen',
@@ -600,6 +602,52 @@ router.get('/monitoring/status', (req, res) => {
                 hasValidConfig: !!(selectedLocation && selectedServices && monitoredDates.length > 0)
             }
         });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Debug-Konfiguration anzeigen
+router.get('/debug', (req, res) => {
+    try {
+        const debugConfig = configService.getDebugConfig();
+        res.json({
+            debug: debugConfig,
+            status: {
+                loggingEnabled: configService.isLoggingEnabled(),
+                screenshotsEnabled: configService.isScreenshotsEnabled(),
+                detailedLoggingEnabled: configService.isDetailedLoggingEnabled(),
+                logLevel: configService.getLogLevel()
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Debug-Konfiguration aktualisieren
+router.put('/debug', (req, res) => {
+    try {
+        const { enableLogging, enableScreenshots, enableDetailedLogs, logLevel } = req.body;
+        
+        const debugSettings = {};
+        if (typeof enableLogging === 'boolean') debugSettings.enableLogging = enableLogging;
+        if (typeof enableScreenshots === 'boolean') debugSettings.enableScreenshots = enableScreenshots;
+        if (typeof enableDetailedLogs === 'boolean') debugSettings.enableDetailedLogs = enableDetailedLogs;
+        if (logLevel && ['error', 'warn', 'info', 'debug'].includes(logLevel)) {
+            debugSettings.logLevel = logLevel;
+        }
+        
+        const success = configService.updateDebugConfig(debugSettings);
+        
+        if (success) {
+            res.json({
+                message: 'Debug-Konfiguration aktualisiert',
+                debug: configService.getDebugConfig()
+            });
+        } else {
+            res.status(500).json({ error: 'Fehler beim Aktualisieren der Debug-Konfiguration' });
+        }
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

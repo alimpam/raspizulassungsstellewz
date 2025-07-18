@@ -13,6 +13,12 @@ class ConfigService {
         this.defaultConfig = {
             checkInterval: '*/10 * * * *', // Alle 10 Minuten
             autoStart: true,
+            debug: {
+                enableLogging: true,
+                enableScreenshots: false,
+                logLevel: 'info',
+                enableDetailedLogs: false
+            },
             notifications: {
                 email: true,
                 telegram: true,
@@ -323,6 +329,43 @@ class ConfigService {
                 description: 'Fahrzeugexport ins Ausland'
             }
         };
+    }
+
+    // Debug-Konfigurationsmethoden
+    getDebugConfig() {
+        return this.config.debug || this.defaultConfig.debug;
+    }
+
+    isLoggingEnabled() {
+        const debug = this.getDebugConfig();
+        return debug.enableLogging !== false;
+    }
+
+    isScreenshotsEnabled() {
+        const debug = this.getDebugConfig();
+        return debug.enableScreenshots === true;
+    }
+
+    isDetailedLoggingEnabled() {
+        const debug = this.getDebugConfig();
+        return debug.enableDetailedLogs === true;
+    }
+
+    getLogLevel() {
+        const debug = this.getDebugConfig();
+        return debug.logLevel || 'info';
+    }
+
+    updateDebugConfig(debugSettings) {
+        try {
+            this.config.debug = { ...this.getDebugConfig(), ...debugSettings };
+            this.saveConfig();
+            logger.info('🔧 Debug-Konfiguration aktualisiert:', debugSettings);
+            return true;
+        } catch (error) {
+            logger.error('❌ Fehler beim Aktualisieren der Debug-Konfiguration:', error);
+            return false;
+        }
     }
 }
 

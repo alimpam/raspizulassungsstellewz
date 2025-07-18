@@ -192,6 +192,11 @@ class AppointmentMonitor extends EventEmitter {
     // Debug-Hilfsfunktionen
     async takeScreenshot(name) {
         try {
+            // Prüfe ob Screenshots aktiviert sind
+            if (!this.configService.isScreenshotsEnabled()) {
+                return null;
+            }
+
             if (this.page) {
                 const fs = require('fs');
                 const path = require('path');
@@ -204,11 +209,16 @@ class AppointmentMonitor extends EventEmitter {
                 
                 const screenshotPath = path.join(logsDir, `debug_${name}_${Date.now()}.png`);
                 await this.page.screenshot({ path: screenshotPath, fullPage: true });
-                logger.info(`📸 Screenshot gespeichert: ${screenshotPath}`);
+                
+                if (this.configService.isLoggingEnabled()) {
+                    logger.info(`📸 Screenshot gespeichert: ${screenshotPath}`);
+                }
                 return screenshotPath;
             }
         } catch (error) {
-            logger.warn(`⚠️ Fehler beim Erstellen des Screenshots ${name}:`, error);
+            if (this.configService.isLoggingEnabled()) {
+                logger.warn(`⚠️ Fehler beim Erstellen des Screenshots ${name}:`, error);
+            }
         }
     }
 
@@ -230,7 +240,9 @@ class AppointmentMonitor extends EventEmitter {
             const serviceMapping = this.configService.getServiceMapping();
 
             // Seite laden - weniger restriktive Wartezeit
-            logger.info(`🌐 Lade Seite: ${this.targetUrl}`);
+            if (this.configService.isDetailedLoggingEnabled()) {
+                logger.info(`🌐 Lade Seite: ${this.targetUrl}`);
+            }
             await this.page.goto(this.targetUrl, { 
                 waitUntil: 'domcontentloaded',
                 timeout: 30000
@@ -243,7 +255,9 @@ class AppointmentMonitor extends EventEmitter {
             await this.debugScreenshot('initial_load', 'Seite initial geladen');
 
             // Warten auf das Formular
-            logger.info('⏳ Warte auf Formular...');
+            if (this.configService.isDetailedLoggingEnabled()) {
+                logger.info('⏳ Warte auf Formular...');
+            }
             await this.page.waitForSelector('#form-add-concern-items', {
                 timeout: puppeteerOptions.timeout
             });
@@ -1039,6 +1053,11 @@ class AppointmentMonitor extends EventEmitter {
 
     async debugScreenshot(name, description) {
         try {
+            // Prüfe ob Screenshots aktiviert sind
+            if (!this.configService.isScreenshotsEnabled()) {
+                return null;
+            }
+
             const fs = require('fs');
             const path = require('path');
             
@@ -1050,10 +1069,15 @@ class AppointmentMonitor extends EventEmitter {
             
             const filename = path.join(logsDir, `debug_${name}_${Date.now()}.png`);
             await this.page.screenshot({ path: filename, fullPage: true });
-            logger.info(`📸 Screenshot gespeichert: ${filename} - ${description}`);
+            
+            if (this.configService.isLoggingEnabled()) {
+                logger.info(`📸 Screenshot gespeichert: ${filename} - ${description}`);
+            }
             return filename;
         } catch (error) {
-            logger.warn(`⚠️ Screenshot konnte nicht erstellt werden: ${error.message}`);
+            if (this.configService.isLoggingEnabled()) {
+                logger.warn(`⚠️ Screenshot konnte nicht erstellt werden: ${error.message}`);
+            }
             return null;
         }
     }
