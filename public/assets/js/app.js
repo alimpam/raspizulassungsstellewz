@@ -22,6 +22,9 @@ class App {
             // Initialize audio system first (uses sound.js)
             await audioManager.initialize();
             
+            // Update sound status in UI
+            uiManager.updateSoundStatus();
+            
             // Initialize data loading
             dataManager.initialize();
             
@@ -210,9 +213,9 @@ class App {
         if (!dateInput || !dateInput.value) return;
         
         try {
-            // Convert German date format to API format
-            const germanDate = dateInput.value.trim();
-            const apiDate = this.convertGermanDateToApiFormat(germanDate);
+            // Convert date format to API format
+            const inputDate = dateInput.value.trim();
+            const apiDate = this.convertGermanDateToApiFormat(inputDate);
             
             await dataManager.addDate(apiDate);
             
@@ -250,9 +253,38 @@ class App {
     /**
      * Convert German date format to API format
      */
-    convertGermanDateToApiFormat(germanDate) {
-        const [day, month, year] = germanDate.split('.');
-        return `${year}/${month.padStart(2, '0')}/${day.padStart(2, '0')}`;
+    /**
+     * Convert date input to API format (YYYY/MM/DD)
+     * Handles both ISO format (YYYY-MM-DD) and German format (DD.MM.YYYY)
+     */
+    convertGermanDateToApiFormat(inputDate) {
+        // Handle different input formats
+        if (inputDate.includes('-')) {
+            // ISO format (YYYY-MM-DD) from HTML date input
+            const [year, month, day] = inputDate.split('-');
+            return `${year}/${month.padStart(2, '0')}/${day.padStart(2, '0')}`;
+        } else if (inputDate.includes('.')) {
+            // German format (DD.MM.YYYY)
+            const germanDateRegex = /^\d{1,2}\.\d{1,2}\.\d{4}$/;
+            if (!germanDateRegex.test(inputDate)) {
+                throw new Error('Ungültiges Datumsformat. Erwartet: DD.MM.YYYY oder verwenden Sie den Kalender');
+            }
+            
+            const [day, month, year] = inputDate.split('.');
+            
+            // Validate date components
+            const dayNum = parseInt(day, 10);
+            const monthNum = parseInt(month, 10);
+            const yearNum = parseInt(year, 10);
+            
+            if (dayNum < 1 || dayNum > 31 || monthNum < 1 || monthNum > 12 || yearNum < 1900 || yearNum > 2100) {
+                throw new Error('Ungültiges Datum');
+            }
+            
+            return `${year}/${month.padStart(2, '0')}/${day.padStart(2, '0')}`;
+        } else {
+            throw new Error('Ungültiges Datumsformat. Verwenden Sie den Kalender oder DD.MM.YYYY Format');
+        }
     }
 
     /**
@@ -912,8 +944,16 @@ const app = new App();
 window.addDate = () => {
     const dateInput = document.getElementById('dateInput');
     if (dateInput && dateInput.value) {
-        dataManager.addDate(dateInput.value);
-        dateInput.value = ''; // Clear input after adding
+        try {
+            // Convert German date format to API format
+            const inputDate = dateInput.value.trim();
+            const apiDate = app.convertGermanDateToApiFormat(inputDate);
+            dataManager.addDate(apiDate);
+            dateInput.value = ''; // Clear input after adding
+        } catch (error) {
+            console.error('Error converting date format:', error);
+            uiManager.showAlert(error.message || 'Ungültiges Datumsformat', 'error');
+        }
     } else {
         uiManager.showAlert('Bitte wählen Sie ein Datum aus', 'warning');
     }

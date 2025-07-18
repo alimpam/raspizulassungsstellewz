@@ -7,7 +7,7 @@ const ConfigService = require('../services/configService');
 // Services initialisieren - use singleton for AppointmentMonitor
 const monitor = AppointmentMonitor.getInstance();
 const notificationService = new NotificationService();
-const configService = new ConfigService();
+const configService = ConfigService.getInstance();
 
 // API-Dokumentation
 router.get('/', (req, res) => {

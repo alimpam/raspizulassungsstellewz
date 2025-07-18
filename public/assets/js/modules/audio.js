@@ -9,8 +9,8 @@ class AudioNotificationManager {
         this.fallbackAudioContext = null;
         this.isInitialized = false;
         
-        // Sound notification configuration
-        this.NOTIFICATION_SOUND_BASE64 = `UklGRpYEAABXQVZFZm10IBAAAAABA...`; // Your base64 string here
+        // Sound notification configuration - using the sound from sound.js
+        this.NOTIFICATION_SOUND_BASE64 = (typeof sound !== 'undefined') ? sound : null;
     }
 
     /**

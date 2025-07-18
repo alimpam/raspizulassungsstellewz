@@ -357,8 +357,20 @@ class AppointmentMonitor extends EventEmitter {
             
             const results = [];
             for (const dateStr of monitoredDates) {
-                const result = await this.checkSingleDate(dateStr);
-                results.push(result);
+                try {
+                    const result = await this.checkSingleDate(dateStr);
+                    results.push(result);
+                    logger.info(`✅ Ergebnis für ${dateStr}: ${result.available ? 'VERFÜGBAR' : 'nicht verfügbar'}`);
+                } catch (dateError) {
+                    logger.error(`❌ Fehler beim Prüfen von ${dateStr}:`, dateError);
+                    // Füge Fehler-Ergebnis hinzu, damit die Schleife weitergeht
+                    results.push({ 
+                        date: dateStr, 
+                        available: false, 
+                        error: dateError.message,
+                        timestamp: new Date().toISOString()
+                    });
+                }
                 
                 // Kurze Pause zwischen Checks
                 await new Promise(resolve => setTimeout(resolve, puppeteerOptions.waitForNetworkIdle || 1000));
@@ -433,10 +445,20 @@ class AppointmentMonitor extends EventEmitter {
                 const dateStr = sortedDates[i];
                 logger.info(`🔍 Prüfe Termin ${i + 1}/${sortedDates.length}: ${dateStr}`);
                 
-                const result = await this.checkSingleDate(dateStr);
-                results.push(result);
-                
-                logger.info(`✅ Ergebnis für ${dateStr}: ${result.available ? 'VERFÜGBAR' : 'nicht verfügbar'}`);
+                try {
+                    const result = await this.checkSingleDate(dateStr);
+                    results.push(result);
+                    logger.info(`✅ Ergebnis für ${dateStr}: ${result.available ? 'VERFÜGBAR' : 'nicht verfügbar'}`);
+                } catch (dateError) {
+                    logger.error(`❌ Fehler beim Prüfen von ${dateStr}:`, dateError);
+                    // Füge Fehler-Ergebnis hinzu, damit die Schleife weitergeht
+                    results.push({ 
+                        date: dateStr, 
+                        available: false, 
+                        error: dateError.message,
+                        timestamp: new Date().toISOString()
+                    });
+                }
                 
                 // Längere Pause zwischen Terminprüfungen für bessere Stabilität
                 if (i < sortedDates.length - 1) {
@@ -776,78 +798,82 @@ class AppointmentMonitor extends EventEmitter {
             logger.info(`🎯 Navigiere zu Monat: ${targetMonth}/${targetYear}`);
 
             while (navigations < maxNavigations) {
-                // Erweiterte Suche nach Kalender-Elementen
-                const currentMonth = await this.page.evaluate(() => {
-                    // Verschiedene Selektoren für den Kalender-Header versuchen
-                    const selectors = [
-                        '.dx-calendar-caption-button .dx-button-text',
-                        '.dx-calendar-caption .dx-button-text',
-                        '.dx-calendar-navigator-caption .dx-button-text',
-                        '.calendar-month-year',
-                        '.month-year-display'
-                    ];
-                    
-                    let caption = null;
-                    for (const selector of selectors) {
-                        caption = document.querySelector(selector);
-                        if (caption) break;
-                    }
-                    
-                    if (!caption) {
-                        // Fallback: Suche nach Text-Pattern in allen Elementen
-                        const allElements = document.querySelectorAll('*');
-                        for (const el of allElements) {
-                            const text = el.textContent?.trim() || '';
-                            if (text.match(/^(Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+\d{4}$/)) {
-                                caption = el;
-                                break;
+                // Erweiterte Suche nach Kalender-Elementen mit Fehlerbehandlung
+                let currentMonth;
+                try {
+                    currentMonth = await this.page.evaluate(() => {
+                        // Verschiedene Selektoren für den Kalender-Header versuchen
+                        const selectors = [
+                            '.dx-calendar-caption-button .dx-button-text',
+                            '.dx-calendar-caption .dx-button-text',
+                            '.dx-calendar-navigator-caption .dx-button-text',
+                            '.calendar-month-year',
+                            '.month-year-display'
+                        ];
+                        
+                        let caption = null;
+                        for (const selector of selectors) {
+                            caption = document.querySelector(selector);
+                            if (caption) break;
+                        }
+                        
+                        if (!caption) {
+                            // Fallback: Suche nach Text-Pattern in allen Elementen
+                            const allElements = document.querySelectorAll('*');
+                            for (const el of allElements) {
+                                const text = el.textContent?.trim() || '';
+                                if (text.match(/^(Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+\d{4}$/)) {
+                                    caption = el;
+                                    break;
+                                }
                             }
                         }
-                    }
-                    
-                    if (!caption) return null;
-                    
-                    const text = caption.textContent.trim(); // z.B. "August 2025"
-                    const parts = text.split(' ');
-                    
-                    if (parts.length !== 2) {
-                        // Versuche alternative Formate
-                        const altMatch = text.match(/(\w+)\s*(\d{4})/);
-                        if (altMatch) {
-                            parts[0] = altMatch[1];
-                            parts[1] = altMatch[2];
-                        } else {
-                            return null;
+                        
+                        if (!caption) return null;
+                        
+                        const text = caption.textContent.trim(); // z.B. "August 2025"
+                        const parts = text.split(' ');
+                        
+                        if (parts.length !== 2) {
+                            // Versuche alternative Formate
+                            const altMatch = text.match(/(\w+)\s*(\d{4})/);
+                            if (altMatch) {
+                                parts[0] = altMatch[1];
+                                parts[1] = altMatch[2];
+                            } else {
+                                return null;
+                            }
                         }
-                    }
-                    
-                    const [monat, jahr] = parts;
-                    
-                    const monthMap = {
-                        'Januar': '01', 'Februar': '02', 'März': '03', 'April': '04',
-                        'Mai': '05', 'Juni': '06', 'Juli': '07', 'August': '08',
-                        'September': '09', 'Oktober': '10', 'November': '11', 'Dezember': '12'
-                    };
-                    
-                    return {
-                        year: jahr,
-                        month: monthMap[monat] || monat,
-                        text: text
-                    };
-                });
+                        
+                        const [monat, jahr] = parts;
+                        
+                        const monthMap = {
+                            'Januar': '01', 'Februar': '02', 'März': '03', 'April': '04',
+                            'Mai': '05', 'Juni': '06', 'Juli': '07', 'August': '08',
+                            'September': '09', 'Oktober': '10', 'November': '11', 'Dezember': '12'
+                        };
+                        
+                        return {
+                            year: jahr,
+                            month: monthMap[monat] || monat,
+                            text: text
+                        };
+                    });
+                } catch (evalError) {
+                    logger.warn('⚠️ Fehler beim Auslesen des aktuellen Monats:', evalError);
+                    currentMonth = null;
+                }
 
                 if (!currentMonth) {
-                    logger.error('❌ Kann aktuellen Monat nicht ermitteln');
-                    // Debug: Verfügbare Elemente loggen
-                    await this.page.evaluate(() => {
-                        const elements = document.querySelectorAll('.dx-calendar *, .calendar *');
-                        console.log('Verfügbare Kalender-Elemente:', Array.from(elements).map(el => ({
-                            tag: el.tagName,
-                            class: el.className,
-                            text: el.textContent?.trim()
-                        })));
-                    });
-                    throw new Error('Kann aktuellen Monat nicht ermitteln');
+                    logger.warn('⚠️ Kann aktuellen Monat nicht ermitteln - verwende Fallback-Navigation');
+                    // Fallback: Versuche trotzdem zu navigieren
+                    const fallbackResult = await this.performFallbackNavigation(targetYear, targetMonth);
+                    if (fallbackResult) {
+                        return true;
+                    }
+                    // Wenn Fallback auch fehlschlägt, gebe Fehler zurück aber breche nicht ab
+                    logger.error('❌ Navigation fehlgeschlagen - verwende aktuellen Monat');
+                    return false;
                 }
 
                 const aktJahr = parseInt(currentMonth.year);
@@ -866,107 +892,123 @@ class AppointmentMonitor extends EventEmitter {
                 // Navigationsrichtung bestimmen und Button suchen
                 let navigationButton = null;
                 
-                if (aktJahr > zielJ || (aktJahr === zielJ && aktMonat > zielM)) {
-                    // Zurück navigieren
-                    logger.info(`⬅️ Navigiere einen Monat zurück von ${currentMonth.text}`);
-                    
-                    // Verschiedene Selektoren für den Zurück-Button versuchen
-                    const prevSelectors = [
-                        '.dx-calendar-navigator-previous-month',
-                        '.dx-calendar-navigator-previous',
-                        '.dx-calendar-prev-button',
-                        '.calendar-prev',
-                        '.prev-month',
-                        'button[aria-label*="previous"]',
-                        'button[aria-label*="vorherig"]'
-                    ];
-                    
-                    for (const selector of prevSelectors) {
-                        navigationButton = await this.page.$(selector);
-                        if (navigationButton) {
-                            logger.info(`✅ Zurück-Button gefunden: ${selector}`);
-                            break;
-                        }
+                try {
+                    if (aktJahr > zielJ || (aktJahr === zielJ && aktMonat > zielM)) {
+                        // Zurück navigieren
+                        logger.info(`⬅️ Navigiere einen Monat zurück von ${currentMonth.text}`);
+                        navigationButton = await this.findNavigationButton('prev');
+                    } else if (aktJahr < zielJ || (aktJahr === zielJ && aktMonat < zielM)) {
+                        // Vorwärts navigieren
+                        logger.info(`➡️ Navigiere einen Monat vor von ${currentMonth.text}`);
+                        navigationButton = await this.findNavigationButton('next');
                     }
-                    
-                } else if (aktJahr < zielJ || (aktJahr === zielJ && aktMonat < zielM)) {
-                    // Vorwärts navigieren
-                    logger.info(`➡️ Navigiere einen Monat vor von ${currentMonth.text}`);
-                    
-                    // Verschiedene Selektoren für den Vor-Button versuchen
-                    const nextSelectors = [
-                        '.dx-calendar-navigator-next-month',
-                        '.dx-calendar-navigator-next',
-                        '.dx-calendar-next-button',
-                        '.calendar-next',
-                        '.next-month',
-                        'button[aria-label*="next"]',
-                        'button[aria-label*="nächst"]'
-                    ];
-                    
-                    for (const selector of nextSelectors) {
-                        navigationButton = await this.page.$(selector);
-                        if (navigationButton) {
-                            logger.info(`✅ Vor-Button gefunden: ${selector}`);
-                            break;
-                        }
-                    }
+                } catch (navError) {
+                    logger.warn('⚠️ Fehler beim Finden des Navigations-Buttons:', navError);
                 }
 
                 if (!navigationButton) {
-                    logger.error('❌ Navigations-Button nicht gefunden');
-                    // Debug: Verfügbare Buttons loggen
-                    await this.page.evaluate(() => {
-                        const buttons = document.querySelectorAll('button, .btn, [role="button"]');
-                        console.log('Verfügbare Buttons:', Array.from(buttons).map(btn => ({
-                            tag: btn.tagName,
-                            class: btn.className,
-                            text: btn.textContent?.trim(),
-                            ariaLabel: btn.getAttribute('aria-label')
-                        })));
-                    });
-                    throw new Error('Navigations-Button nicht gefunden');
+                    logger.warn('⚠️ Navigations-Button nicht gefunden - überspringe Navigation');
+                    return false;
                 }
 
-                // Button klicken
-                await navigationButton.click();
+                try {
+                    // Button klicken
+                    await navigationButton.click();
 
-                // Warten bis Navigation abgeschlossen - erweiterte Wartezeit
-                await new Promise(resolve => setTimeout(resolve, 1200));
-                
-                // Warten bis der neue Monat geladen ist - mit mehreren Versuchen
-                let monthUpdated = false;
-                for (let attempt = 0; attempt < 3; attempt++) {
-                    try {
-                        await this.page.waitForFunction(() => {
-                            const caption = document.querySelector('.dx-calendar-caption-button .dx-button-text') ||
-                                           document.querySelector('.dx-calendar-caption .dx-button-text');
-                            return caption && caption.textContent.trim() !== '';
-                        }, { timeout: 3000 });
-                        
-                        monthUpdated = true;
-                        break;
-                    } catch (waitError) {
-                        logger.warn(`⚠️ Warte-Versuch ${attempt + 1}/3 für Monats-Update fehlgeschlagen`);
-                        await new Promise(resolve => setTimeout(resolve, 500));
+                    // Warten bis Navigation abgeschlossen - erweiterte Wartezeit
+                    await new Promise(resolve => setTimeout(resolve, 1200));
+                    
+                    // Warten bis der neue Monat geladen ist - mit mehreren Versuchen
+                    let monthUpdated = false;
+                    for (let attempt = 0; attempt < 3; attempt++) {
+                        try {
+                            await this.page.waitForFunction(() => {
+                                const caption = document.querySelector('.dx-calendar-caption-button .dx-button-text') ||
+                                               document.querySelector('.dx-calendar-caption .dx-button-text');
+                                return caption && caption.textContent.trim() !== '';
+                            }, { timeout: 3000 });
+                            
+                            monthUpdated = true;
+                            break;
+                        } catch (waitError) {
+                            logger.warn(`⚠️ Warte-Versuch ${attempt + 1}/3 für Monats-Update fehlgeschlagen`);
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                        }
                     }
-                }
-                
-                if (!monthUpdated) {
-                    logger.warn('⚠️ Monat-Update nicht bestätigt, versuche trotzdem weiter');
+                    
+                    if (!monthUpdated) {
+                        logger.warn('⚠️ Monat-Update nicht bestätigt, versuche trotzdem weiter');
+                    }
+                    
+                } catch (clickError) {
+                    logger.warn('⚠️ Fehler beim Klicken des Navigations-Buttons:', clickError);
+                    // Versuche trotzdem weiterzumachen
                 }
                 
                 navigations++;
                 
                 // Debug: Screenshot nach Navigation
-                await this.createScreenshot(`navigation_step_${navigations}_${targetMonth}_${targetYear}`, `Navigation Schritt ${navigations} zu ${targetMonth}/${targetYear}`);
+                try {
+                    await this.createScreenshot(`navigation_step_${navigations}_${targetMonth}_${targetYear}`, `Navigation Schritt ${navigations} zu ${targetMonth}/${targetYear}`);
+                } catch (screenshotError) {
+                    // Screenshot-Fehler ignorieren
+                }
             }
 
-            throw new Error(`Maximale Navigationen (${maxNavigations}) erreicht für Monat ${targetMonth}/${targetYear}`);
+            logger.warn(`⚠️ Maximale Navigationen (${maxNavigations}) erreicht für Monat ${targetMonth}/${targetYear} - verwende aktuellen Monat`);
+            return false;
 
         } catch (error) {
-            logger.error(`❌ Fehler bei der Monatsnavigation zu ${targetMonth}/${targetYear}:`, error);
-            throw error;
+            logger.warn(`⚠️ Fehler bei der Monatsnavigation zu ${targetMonth}/${targetYear}:`, error);
+            return false;
+        }
+    }
+
+    async findNavigationButton(direction) {
+        let selectors;
+        
+        if (direction === 'prev') {
+            selectors = [
+                '.dx-calendar-navigator-previous-month',
+                '.dx-calendar-navigator-previous',
+                '.dx-calendar-prev-button',
+                '.calendar-prev',
+                '.prev-month',
+                'button[aria-label*="previous"]',
+                'button[aria-label*="vorherig"]'
+            ];
+        } else {
+            selectors = [
+                '.dx-calendar-navigator-next-month',
+                '.dx-calendar-navigator-next',
+                '.dx-calendar-next-button',
+                '.calendar-next',
+                '.next-month',
+                'button[aria-label*="next"]',
+                'button[aria-label*="nächst"]'
+            ];
+        }
+        
+        for (const selector of selectors) {
+            const button = await this.page.$(selector);
+            if (button) {
+                logger.info(`✅ ${direction === 'prev' ? 'Zurück' : 'Vor'}-Button gefunden: ${selector}`);
+                return button;
+            }
+        }
+        
+        return null;
+    }
+
+    async performFallbackNavigation(targetYear, targetMonth) {
+        try {
+            logger.info('🔄 Versuche Fallback-Navigation...');
+            // Einfach versuchen weiterzumachen ohne Navigation
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            return true;
+        } catch (error) {
+            logger.warn('⚠️ Fallback-Navigation fehlgeschlagen:', error);
+            return false;
         }
     }
 

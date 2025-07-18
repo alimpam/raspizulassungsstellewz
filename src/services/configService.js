@@ -4,6 +4,11 @@ const logger = require('../utils/logger');
 
 class ConfigService {
     constructor() {
+        // Singleton pattern - return existing instance if already created
+        if (ConfigService.instance) {
+            return ConfigService.instance;
+        }
+
         this.configPath = path.join(__dirname, '../../config/settings.json');
         this.defaultConfig = {
             checkInterval: '*/10 * * * *', // Alle 10 Minuten
@@ -37,6 +42,16 @@ class ConfigService {
         };
         
         this.config = this.loadConfig();
+        
+        // Store the singleton instance
+        ConfigService.instance = this;
+    }
+
+    static getInstance() {
+        if (!ConfigService.instance) {
+            ConfigService.instance = new ConfigService();
+        }
+        return ConfigService.instance;
     }
 
     loadConfig() {
@@ -116,7 +131,22 @@ class ConfigService {
     }
 
     getMonitoredDates() {
+        // Lade Konfiguration bei jedem Zugriff neu um sicherzustellen,
+        // dass wir die neuesten Daten haben
+        this.reloadConfig();
         return this.config.watchedDates || [];
+    }
+
+    reloadConfig() {
+        try {
+            if (fs.existsSync(this.configPath)) {
+                const fileContent = fs.readFileSync(this.configPath, 'utf8');
+                const newConfig = JSON.parse(fileContent);
+                this.config = { ...this.defaultConfig, ...newConfig };
+            }
+        } catch (error) {
+            logger.error('❌ Fehler beim Neuladen der Konfiguration:', error);
+        }
     }
 
     getWatchedDates() {
