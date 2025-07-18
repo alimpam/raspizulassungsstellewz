@@ -773,7 +773,9 @@ class AppointmentMonitor extends EventEmitter {
             if (result.available) {
                 this.emit('appointmentFound', {
                     ...result,
-                    url: this.targetUrl
+                    url: this.targetUrl,
+                    time: result.time || null,
+                    displayDate: result.germanDate || result.date
                 });
                 
                 logger.info(`🎉 Verfügbarer Termin gefunden: ${germanDate}`);

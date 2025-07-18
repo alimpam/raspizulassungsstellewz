@@ -77,10 +77,13 @@ class TerminApp {
     initializeMonitoring() {
         // Terminüberwachung Event-Handler
         this.monitor.on('appointmentFound', (appointment) => {
-            logger.info(`✅ Verfügbarer Termin gefunden: ${appointment.date} - ${appointment.time}`);
+            const dateDisplay = appointment.germanDate || appointment.date;
+            const timeDisplay = appointment.time || 'Zeit unbekannt';
+            
+            logger.info(`✅ Verfügbarer Termin gefunden: ${dateDisplay} - ${timeDisplay}`);
             this.notificationService.sendNotification(
                 '🎉 Termin verfügbar!',
-                `Ein Termin ist verfügbar: ${appointment.date} um ${appointment.time}\\n\\nLink: ${appointment.url}`
+                `Ein Termin ist verfügbar: ${dateDisplay}${appointment.time ? ` um ${appointment.time}` : ''}\\n\\nLink: ${appointment.url}`
             );
         });
 

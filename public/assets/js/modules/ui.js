@@ -219,12 +219,15 @@ class UIManager {
             
             switch (audioStatus.status) {
                 case 'ready':
+                    const duration = audioStatus.duration ? audioStatus.duration.toFixed(2) : 'unbekannt';
+                    const channels = audioStatus.channels || 'unbekannt';
                     soundNotificationStatus.innerHTML = `<span style="color: #28a745;">✅ Konfiguriert und bereit (Web Audio API)</span><br>
-                        <small>Duration: ${audioStatus.duration.toFixed(2)}s, Channels: ${audioStatus.channels}</small>`;
+                        <small>Duration: ${duration}s, Channels: ${channels}</small>`;
                     break;
                 case 'fallback':
+                    const message = audioStatus.message || 'Unbekannter Grund';
                     soundNotificationStatus.innerHTML = `<span style="color: #ffc107;">⚠️ Fallback Beep aktiv</span><br>
-                        <small>Custom Sound nicht verfügbar - ${audioStatus.message}</small>`;
+                        <small>Custom Sound nicht verfügbar - ${message}</small>`;
                     break;
                 default:
                     soundNotificationStatus.innerHTML = `<span style="color: #dc3545;">❌ Nicht verfügbar</span><br>
