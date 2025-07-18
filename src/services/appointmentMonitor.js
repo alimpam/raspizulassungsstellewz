@@ -1045,7 +1045,14 @@ class AppointmentMonitor extends EventEmitter {
 
     removeWatchedDate(dateStr) {
         this.watchedDates.delete(dateStr);
+        
+        // Entferne auch alle gespeicherten Ergebnisse für diesen Termin
+        if (this.lastResults && Array.isArray(this.lastResults)) {
+            this.lastResults = this.lastResults.filter(result => result.date !== dateStr);
+        }
+        
         logger.info(`➖ Termin aus Überwachung entfernt: ${dateStr}`);
+        logger.info(`🗑️ Gespeicherte Ergebnisse für ${dateStr} gelöscht`);
     }
 
     // Synchronisation mit configService
@@ -1062,6 +1069,16 @@ class AppointmentMonitor extends EventEmitter {
         configDates.forEach(date => {
             this.watchedDates.add(date);
         });
+        
+        // Bereinige lastResults - entferne Ergebnisse für Termine, die nicht mehr überwacht werden
+        if (this.lastResults && Array.isArray(this.lastResults)) {
+            const oldCount = this.lastResults.length;
+            this.lastResults = this.lastResults.filter(result => configDates.includes(result.date));
+            const newCount = this.lastResults.length;
+            if (oldCount !== newCount) {
+                logger.info(`🗑️ ${oldCount - newCount} verwaiste Termin-Ergebnisse bereinigt`);
+            }
+        }
         
         logger.info(`🔄 Synchronisation abgeschlossen: ${this.watchedDates.size} überwachte Termine`);
     }
