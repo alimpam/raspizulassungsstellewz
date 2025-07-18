@@ -472,109 +472,69 @@
             }
         }
         
-        // Initialize sound notification
+        // Initialize sound notification using Web Audio API (CSP-friendly)
         function initSoundNotification() {
             if (NOTIFICATION_SOUND_BASE64 && NOTIFICATION_SOUND_BASE64.trim() !== '') {
                 try {
-                    // Try multiple audio formats in case MP3 doesn't work
-                    const audioFormats = [
-                        `data:audio/mp3;base64,${NOTIFICATION_SOUND_BASE64}`,
-                        `data:audio/wav;base64,${NOTIFICATION_SOUND_BASE64}`,
-                        `data:audio/mpeg;base64,${NOTIFICATION_SOUND_BASE64}`,
-                        `data:audio/ogg;base64,${NOTIFICATION_SOUND_BASE64}`
-                    ];
-                    
-                    let formatWorked = false;
-                    for (const format of audioFormats) {
-                        try {
-                            const testAudio = new Audio(format);
-                            testAudio.preload = 'auto';
-                            testAudio.volume = 0.8;
-                            
-                            // Test if the audio can be loaded
-                            testAudio.addEventListener('loadeddata', () => {
-                                if (!formatWorked) {
-                                    notificationAudio = testAudio;
-                                    formatWorked = true;
-                                    console.log('Sound notification initialized successfully with format:', format.split(';')[0]);
-                                }
-                            });
-                            
-                            testAudio.addEventListener('error', (e) => {
-                                console.log('Audio format failed:', format.split(';')[0], e);
-                            });
-                            
-                            // If no error is thrown immediately, use this format
-                            if (!formatWorked) {
-                                notificationAudio = testAudio;
-                                formatWorked = true;
-                                console.log('Sound notification initialized with format:', format.split(';')[0]);
-                                break;
-                            }
-                        } catch (formatError) {
-                            console.log('Format not supported:', format.split(';')[0]);
-                        }
+                    // Use Web Audio API instead of HTML5 Audio to bypass CSP
+                    if (!fallbackAudioContext) {
+                        fallbackAudioContext = new (window.AudioContext || window.webkitAudioContext)();
                     }
                     
-                    if (!formatWorked) {
-                        console.error('No audio format worked for the provided base64 string');
-                        notificationAudio = null;
+                    // Convert base64 to ArrayBuffer
+                    const base64Data = NOTIFICATION_SOUND_BASE64.replace(/^data:audio\/[^;]+;base64,/, '');
+                    const binaryString = atob(base64Data);
+                    const arrayBuffer = new ArrayBuffer(binaryString.length);
+                    const uint8Array = new Uint8Array(arrayBuffer);
+                    
+                    for (let i = 0; i < binaryString.length; i++) {
+                        uint8Array[i] = binaryString.charCodeAt(i);
                     }
                     
+                    // Decode audio data
+                    fallbackAudioContext.decodeAudioData(arrayBuffer.slice(0))
+                        .then(audioBuffer => {
+                            notificationAudio = audioBuffer;
+                            console.log('Sound notification initialized successfully with Web Audio API');
+                        })
+                        .catch(error => {
+                            console.warn('Failed to decode audio data:', error);
+                            notificationAudio = null;
+                        });
+                        
                 } catch (error) {
                     console.error('Error initializing sound notification:', error);
                     notificationAudio = null;
                 }
             } else {
-                console.log('No base64 audio string provided');
+                console.log('No notification sound configured - using fallback beep');
+                notificationAudio = null;
             }
         }
         
-        // Play notification sound
+        // Play notification sound using Web Audio API
         function playNotificationSound() {
-            if (notificationAudio) {
+            if (notificationAudio && notificationAudio instanceof AudioBuffer) {
                 try {
-                    notificationAudio.currentTime = 0; // Reset to start
-                    
-                    // Check if the audio is ready to play
-                    if (notificationAudio.readyState >= 2) { // HAVE_CURRENT_DATA
-                        const playPromise = notificationAudio.play();
-                        if (playPromise !== undefined) {
-                            playPromise.then(() => {
-                                console.log('Notification sound played successfully');
-                            }).catch(error => {
-                                console.error('Error playing notification sound:', error);
-                                // Fallback to beep sound
-                                createFallbackBeep();
-                            });
-                        }
-                    } else {
-                        // Audio not ready, try to load it first
-                        console.log('Audio not ready, attempting to load...');
-                        notificationAudio.load();
-                        notificationAudio.addEventListener('canplay', () => {
-                            const playPromise = notificationAudio.play();
-                            if (playPromise !== undefined) {
-                                playPromise.then(() => {
-                                    console.log('Notification sound played successfully after loading');
-                                }).catch(error => {
-                                    console.error('Error playing notification sound after loading:', error);
-                                    // Fallback to beep sound
-                                    createFallbackBeep();
-                                });
-                            }
-                        }, { once: true });
-                        
-                        // Fallback timeout
-                        setTimeout(() => {
-                            if (notificationAudio.readyState < 2) {
-                                console.log('Audio loading timeout, using fallback beep');
-                                createFallbackBeep();
-                            }
-                        }, 2000);
+                    // notificationAudio is now an AudioBuffer from Web Audio API
+                    if (!fallbackAudioContext) {
+                        fallbackAudioContext = new (window.AudioContext || window.webkitAudioContext)();
                     }
+                    
+                    // Resume audio context if suspended (Chrome requires user interaction)
+                    if (fallbackAudioContext.state === 'suspended') {
+                        fallbackAudioContext.resume();
+                    }
+                    
+                    // Create audio source and play
+                    const source = fallbackAudioContext.createBufferSource();
+                    source.buffer = notificationAudio;
+                    source.connect(fallbackAudioContext.destination);
+                    source.start(0);
+                    
+                    console.log('Notification sound played successfully with Web Audio API');
                 } catch (error) {
-                    console.error('Error playing notification sound:', error);
+                    console.error('Error playing notification sound with Web Audio API:', error);
                     // Fallback to beep sound
                     createFallbackBeep();
                 }
@@ -592,9 +552,11 @@
             }
             
             console.log('Testing notification sound...');
-            console.log('Audio ready state:', notificationAudio.readyState);
-            console.log('Audio duration:', notificationAudio.duration);
-            console.log('Audio source:', notificationAudio.src.substring(0, 50) + '...');
+            if (notificationAudio instanceof AudioBuffer) {
+                console.log('Audio buffer duration:', notificationAudio.duration);
+                console.log('Audio buffer channels:', notificationAudio.numberOfChannels);
+                console.log('Audio buffer sample rate:', notificationAudio.sampleRate);
+            }
             
             playNotificationSound();
             showAlert('Test sound triggered! Check console for details.', 'success');
@@ -850,21 +812,12 @@
             // Sound-Benachrichtigung Status anzeigen
             const soundNotificationStatus = document.getElementById('soundNotificationStatus');
             if (soundNotificationStatus) {
-                if (notificationAudio) {
-                    const readyState = notificationAudio.readyState;
-                    const readyStateText = {
-                        0: 'HAVE_NOTHING',
-                        1: 'HAVE_METADATA', 
-                        2: 'HAVE_CURRENT_DATA',
-                        3: 'HAVE_FUTURE_DATA',
-                        4: 'HAVE_ENOUGH_DATA'
-                    }[readyState] || 'UNKNOWN';
-                    
-                    soundNotificationStatus.innerHTML = `<span style="color: #28a745;">✅ Konfiguriert und bereit</span><br>
-                        <small>State: ${readyStateText} (${readyState})</small>`;
+                if (notificationAudio && notificationAudio instanceof AudioBuffer) {
+                    soundNotificationStatus.innerHTML = `<span style="color: #28a745;">✅ Konfiguriert und bereit (Web Audio API)</span><br>
+                        <small>Duration: ${notificationAudio.duration.toFixed(2)}s, Channels: ${notificationAudio.numberOfChannels}</small>`;
                 } else if (NOTIFICATION_SOUND_BASE64 && NOTIFICATION_SOUND_BASE64.trim() !== '') {
-                    soundNotificationStatus.innerHTML = `<span style="color: #ffc107;">⚠️ Konfiguriert, Fallback Beep verfügbar</span><br>
-                        <small>Base64 Audio konnte nicht geladen werden</small>`;
+                    soundNotificationStatus.innerHTML = `<span style="color: #ffc107;">⚠️ Konfiguriert, wird geladen...</span><br>
+                        <small>Base64 Audio wird mit Web Audio API verarbeitet</small>`;
                 } else {
                     soundNotificationStatus.innerHTML = `<span style="color: #dc3545;">❌ Nicht konfiguriert</span><br>
                         <small>Base64 String fehlt - Fallback Beep verfügbar</small>`;
