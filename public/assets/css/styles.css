@@ -622,11 +622,12 @@ select.form-control {
     color: #856404;
 }
 
-/* Improved date input with clickable calendar */
+/* Improved date input with clickable calendar and mobile optimization */
 .date-input-wrapper {
     position: relative;
     display: flex;
     flex: 1;
+    flex-direction: column;
 }
 
 .date-input-wrapper input[type="date"] {
@@ -634,20 +635,99 @@ select.form-control {
     flex: 1;
 }
 
-.date-picker-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    cursor: pointer;
-    z-index: 1;
-    background: transparent;
+/* Mobile-friendly date input styles */
+.mobile-friendly-input {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
 }
 
-.date-picker-overlay:hover {
-    background: rgba(0, 123, 255, 0.05);
-    border-radius: 4px;
+.mobile-date-input {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+}
+
+.date-input-label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: #495057;
+    font-size: 14px;
+}
+
+.mobile-optimized-date {
+    width: 100% !important;
+    padding: 14px 50px 14px 14px !important;
+    border: 2px solid #e9ecef !important;
+    border-radius: 8px !important;
+    font-size: 16px !important; /* Prevents zoom on iOS */
+    background: white !important;
+    transition: all 0.2s ease !important;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    min-height: 48px; /* Touch-friendly minimum height */
+    position: relative;
+    z-index: 0; /* Ensure input is below button but still clickable */
+}
+
+.mobile-optimized-date:focus {
+    outline: none !important;
+    border-color: #007bff !important;
+    box-shadow: 0 0 0 3px rgba(0,123,255,0.15) !important;
+}
+
+.date-picker-btn {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+    cursor: pointer;
+    z-index: 1; /* Reduced z-index to not block input */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    touch-action: manipulation; /* Prevents double-tap zoom */
+    pointer-events: auto; /* Ensure button is clickable */
+}
+
+.date-picker-btn:hover {
+    background: #0056b3;
+    transform: translateY(-50%) scale(1.05);
+}
+
+.date-picker-btn:active {
+    transform: translateY(-50%) scale(0.98);
+}
+
+.add-date-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 20px;
+    font-size: 16px;
+    min-height: 48px; /* Touch-friendly */
+    white-space: nowrap;
+    touch-action: manipulation;
+}
+
+.btn-icon {
+    font-size: 14px;
+}
+
+.btn-text {
+    font-weight: 500;
 }
 
 /* Check button animations */
@@ -707,6 +787,58 @@ select.form-control {
         flex-direction: column;
         align-items: stretch;
     }
+    
+    /* Mobile-specific date input optimizations */
+    .mobile-friendly-input {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .mobile-date-input {
+        min-width: unset;
+        width: 100%;
+    }
+    
+    .mobile-optimized-date {
+        font-size: 17px !important; /* Optimal for mobile */
+        padding: 16px 50px 16px 16px !important;
+        min-height: 52px !important; /* Larger touch target */
+    }
+    
+    .date-picker-btn {
+        width: 40px;
+        height: 40px;
+        font-size: 18px;
+        right: 6px;
+    }
+    
+    .add-date-btn {
+        padding: 16px 24px;
+        font-size: 17px;
+        min-height: 52px;
+        justify-content: center;
+    }
+    
+    /* Better button spacing on mobile */
+    .card .btn {
+        padding: 14px 20px;
+        font-size: 16px;
+        min-height: 48px;
+        touch-action: manipulation;
+    }
+    
+    /* Improve form controls on mobile */
+    .form-control {
+        padding: 16px;
+        font-size: 17px; /* Prevents zoom on iOS */
+        min-height: 52px;
+    }
+    
+    select.form-control {
+        padding-right: 50px;
+        background-size: 24px;
+        background-position: right 16px center;
+    }
 }
 
 /* Dark mode support */
@@ -758,9 +890,139 @@ select.form-control {
         color: #e2e8f0;
     }
     
+    .mobile-optimized-date {
+        background: #2d3748 !important;
+        color: #e2e8f0 !important;
+        border-color: #4a5568 !important;
+    }
+    
+    .date-input-label {
+        color: #e2e8f0;
+    }
+    
     select.form-control {
         background: #2d3748;
         background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2363b3ed'%3e%3cpath fill-rule='evenodd' d='M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' clip-rule='evenodd'/%3e%3c/svg%3e");
         color: #e2e8f0;
+    }
+}
+
+/* Additional mobile-specific optimizations */
+.mobile-optimized {
+    -webkit-tap-highlight-color: rgba(0, 123, 255, 0.3);
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+.mobile-optimized input[type="date"],
+.mobile-optimized input[type="text"],
+.mobile-optimized select,
+.mobile-optimized textarea {
+    -webkit-user-select: text;
+    -khtml-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+}
+
+/* iOS specific fixes */
+@supports (-webkit-touch-callout: none) {
+    .mobile-optimized-date {
+        /* Aktiviere native iOS Datumswähler */
+        -webkit-appearance: textfield !important;
+        appearance: textfield !important;
+        background-image: none !important;
+        padding-right: 14px !important;
+    }
+    
+    .mobile-optimized-date::-webkit-date-and-time-value {
+        text-align: left;
+        min-height: 1.2em;
+    }
+    
+    .mobile-optimized-date::-webkit-datetime-edit {
+        padding: 0;
+        margin: 0;
+    }
+    
+    .mobile-optimized-date::-webkit-datetime-edit-fields-wrapper {
+        padding: 0;
+        margin: 0;
+    }
+    
+    .date-picker-btn {
+        display: none !important; /* Verstecke Button auf iOS */
+    }
+    
+    .date-input-wrapper {
+        position: relative;
+    }
+    
+    /* iOS Safari Datums-Input spezifische Regeln */
+    .mobile-optimized-date:focus {
+        -webkit-appearance: textfield !important;
+        appearance: textfield !important;
+    }
+}
+
+/* Android specific fixes */
+@media screen and (-webkit-min-device-pixel-ratio: 0) and (min-resolution: 0.001dpcm) {
+    .mobile-optimized-date {
+        background-image: none !important;
+        padding-right: 50px !important;
+    }
+}
+
+/* High DPI displays */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .date-picker-btn {
+        font-size: 18px;
+    }
+    
+    .mobile-optimized-date {
+        border-width: 1px !important;
+    }
+}
+
+/* Spezielle iOS Datums-Input Korrekturen */
+input[type="date"][data-ios-compatible="true"] {
+    -webkit-appearance: textfield;
+    appearance: textfield;
+    min-height: 48px;
+    padding: 14px 16px;
+    font-size: 17px; /* Verhindert Zoom auf iOS */
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    background: white;
+    color: #495057;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+input[type="date"][data-ios-compatible="true"]:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0,123,255,0.15);
+    outline: none;
+}
+
+/* Verstecke Kalender-Button bei iOS Geräten */
+@supports (-webkit-touch-callout: none) {
+    .date-picker-btn {
+        display: none !important;
+    }
+    
+    .date-input-wrapper::after {
+        content: "📅";
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        pointer-events: none;
+        font-size: 18px;
+        color: #007bff;
     }
 }

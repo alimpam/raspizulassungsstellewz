@@ -32,12 +32,24 @@
             <div class="grid">
                 <div class="card">
                     <h2>📅 Terminverwaltung</h2>
-                    <div class="input-group">
-                        <div class="date-input-wrapper">
-                            <input type="date" id="dateInput" placeholder="Datum auswählen">
-                            <div class="date-picker-overlay" onclick="openDatePicker()"></div>
+                    <div class="input-group mobile-friendly-input">
+                        <div class="date-input-wrapper mobile-date-input">
+                            <label for="dateInput" class="date-input-label">📅 Datum auswählen</label>
+                            <input type="date" id="dateInput" 
+                                   placeholder="YYYY-MM-DD"
+                                   class="mobile-optimized-date"
+                                   autocomplete="off"
+                                   data-ios-compatible="true"
+                                   pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}"
+                                   aria-label="Datum für Terminüberwachung auswählen">
+                            <button type="button" class="date-picker-btn" onclick="openDatePicker()" aria-label="Kalender öffnen">
+                                📅
+                            </button>
                         </div>
-                        <button class="btn" onclick="addDate()">Hinzufügen</button>
+                        <button class="btn add-date-btn" onclick="addDate()">
+                            <span class="btn-icon">➕</span>
+                            <span class="btn-text">Hinzufügen</span>
+                        </button>
                     </div>
                     <ul class="date-list" id="dateList"></ul>
                     <button class="btn btn-success" onclick="checkNow()" id="checkNowBtn">
