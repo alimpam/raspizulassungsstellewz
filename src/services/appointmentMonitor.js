@@ -32,7 +32,8 @@ class AppointmentMonitor extends EventEmitter {
             
             const puppeteerOptions = this.configService.getPuppeteerOptions();
             
-            this.browser = await puppeteer.launch({
+            // Chrome-Konfiguration laden
+            let launchOptions = {
                 headless: puppeteerOptions.headless,
                 args: [
                     '--no-sandbox',
@@ -57,7 +58,33 @@ class AppointmentMonitor extends EventEmitter {
                     '--no-zygote',
                     '--single-process'
                 ]
-            });
+            };
+
+            // Versuche Chrome-Konfiguration zu laden
+            try {
+                const fs = require('fs');
+                const path = require('path');
+                const chromeConfigPath = path.join(__dirname, '..', '..', 'config', 'chrome-config.json');
+                
+                if (fs.existsSync(chromeConfigPath)) {
+                    const chromeConfig = JSON.parse(fs.readFileSync(chromeConfigPath, 'utf8'));
+                    logger.info(`🔧 Chrome-Konfiguration geladen: ${chromeConfig.platform}`);
+                    
+                    if (chromeConfig.useSystemChrome && chromeConfig.chromePath) {
+                        launchOptions.executablePath = chromeConfig.chromePath;
+                        logger.info(`🔧 Verwende System-Chrome: ${chromeConfig.chromePath}`);
+                    } else {
+                        logger.info('🔧 Verwende Standard Puppeteer Chrome');
+                    }
+                } else {
+                    logger.info('🔧 Keine Chrome-Konfiguration gefunden, verwende Standard');
+                }
+            } catch (configError) {
+                logger.warn('⚠️ Fehler beim Laden der Chrome-Konfiguration:', configError.message);
+                logger.info('🔧 Verwende Standard Puppeteer Chrome');
+            }
+            
+            this.browser = await puppeteer.launch(launchOptions);
 
             this.page = await this.browser.newPage();
             
