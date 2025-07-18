@@ -15,7 +15,7 @@ class TerminApp {
     constructor() {
         this.app = express();
         this.port = process.env.PORT || 3000;
-        this.monitor = new AppointmentMonitor();
+        this.monitor = AppointmentMonitor.getInstance(); // Use singleton
         this.notificationService = new NotificationService();
         this.configService = new ConfigService();
         this.cronJob = null;

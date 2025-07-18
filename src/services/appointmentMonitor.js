@@ -5,6 +5,11 @@ const configService = require('./configService');
 
 class AppointmentMonitor extends EventEmitter {
     constructor() {
+        // Singleton pattern - return existing instance if already created
+        if (AppointmentMonitor.instance) {
+            return AppointmentMonitor.instance;
+        }
+
         super();
         this.browser = null;
         this.page = null;
@@ -16,6 +21,9 @@ class AppointmentMonitor extends EventEmitter {
         this.monitoringInterval = null;
         this.consecutiveErrors = 0;
         this.lastResults = []; // Store the last appointment check results
+
+        // Store the singleton instance
+        AppointmentMonitor.instance = this;
     }
 
     async initialize() {
@@ -1244,24 +1252,6 @@ class AppointmentMonitor extends EventEmitter {
         }
    }
 
-    // Synchronisiere mit configService
-    syncWithConfig() {
-        // Konfiguration neu laden
-        this.configService.loadConfig();
-        const configDates = this.configService.getMonitoredDates();
-        
-        logger.info(`🔄 Synchronisation - Config hat ${configDates.length} Termine: ${JSON.stringify(configDates)}`);
-        logger.info(`🔄 Synchronisation - Monitor hat ${this.watchedDates.size} Termine: ${JSON.stringify(Array.from(this.watchedDates))}`);
-        
-        // Aktualisiere watchedDates basierend auf configService
-        this.watchedDates.clear();
-        configDates.forEach(date => {
-            this.watchedDates.add(date);
-        });
-        
-        logger.info(`🔄 Synchronisation abgeschlossen: ${this.watchedDates.size} überwachte Termine`);
-    }
-
     // Robuste Browser-Wiederherstellung
     async ensureBrowserIsActive() {
         try {
@@ -1422,6 +1412,22 @@ class AppointmentMonitor extends EventEmitter {
             return false;
         }
     }
+
+    // Static method to get singleton instance
+    static getInstance() {
+        if (!AppointmentMonitor.instance) {
+            new AppointmentMonitor();
+        }
+        return AppointmentMonitor.instance;
+    }
+
+    // Static method to clear singleton instance (useful for testing)
+    static clearInstance() {
+        AppointmentMonitor.instance = null;
+    }
 }
+
+// Static property to hold the singleton instance
+AppointmentMonitor.instance = null;
 
 module.exports = AppointmentMonitor;

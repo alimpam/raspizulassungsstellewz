@@ -4,8 +4,8 @@ const AppointmentMonitor = require('../services/appointmentMonitor');
 const NotificationService = require('../services/notificationService');
 const ConfigService = require('../services/configService');
 
-// Services initialisieren
-const monitor = new AppointmentMonitor();
+// Services initialisieren - use singleton for AppointmentMonitor
+const monitor = AppointmentMonitor.getInstance();
 const notificationService = new NotificationService();
 const configService = new ConfigService();
 
@@ -288,9 +288,6 @@ router.get('/dates', (req, res) => {
     const monitoringStatus = monitor.getMonitoringStatus();
     const lastResults = monitor.getLastResults();
     
-    console.log('API /dates - Überwachte Termine:', monitoredDates);
-    console.log('API /dates - Letzte Ergebnisse:', lastResults);
-    
     const dates = monitoredDates.map(dateStr => {
         const [yyyy, mm, dd] = dateStr.split('/');
         
@@ -311,7 +308,6 @@ router.get('/dates', (req, res) => {
         };
     });
     
-    console.log('API /dates - Rückgabe:', dates);
     res.json(dates);
 });
 
