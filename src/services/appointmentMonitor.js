@@ -13,10 +13,9 @@ class AppointmentMonitor extends EventEmitter {
         this.configService = new configService();
         this.targetUrl = this.configService.getWebsiteUrl();
         this.watchedDates = new Set();
-        this.foundAppointments = new Set();
-        this.appointmentDetails = {}; // Speichere detaillierte Informationen über gefundene Termine
         this.monitoringInterval = null;
         this.consecutiveErrors = 0;
+        this.lastResults = []; // Store the last appointment check results
     }
 
     async initialize() {
@@ -130,9 +129,28 @@ class AppointmentMonitor extends EventEmitter {
             // Standort auswählen
             await this.selectLocation();
 
-            // Warten auf Kalender
+            // Warten auf Kalender - Verbesserte Wartestrategie
             logger.info('⏳ Warte auf Kalender...');
             await this.page.waitForFunction(() => {
+                // Prüfe zuerst, ob die Kalender-Struktur existiert
+                const calendarBody = document.querySelector('.dx-calendar-body');
+                if (!calendarBody) {
+                    return false;
+                }
+                
+                // Prüfe ob mindestens ein Kalender-Element mit data-value existiert
+                const calendarCells = document.querySelectorAll('td[data-value]');
+                if (calendarCells.length === 0) {
+                    return false;
+                }
+                
+                // Prüfe ob die Kalender-Tabelle sichtbar ist
+                const calendarTable = document.querySelector('.dx-calendar-body table');
+                if (!calendarTable) {
+                    return false;
+                }
+                
+                // Zusätzliche Prüfung: Schaue nach den Kalender-Überschriften
                 const selectors = [
                     '.dx-calendar-caption-button .dx-button-text',
                     '.dx-calendar-caption .dx-button-text',
@@ -141,13 +159,17 @@ class AppointmentMonitor extends EventEmitter {
                     '.month-year-display'
                 ];
                 
+                let hasCaption = false;
                 for (const selector of selectors) {
                     const element = document.querySelector(selector);
                     if (element && element.textContent.trim()) {
-                        return true;
+                        hasCaption = true;
+                        break;
                     }
                 }
-                return false;
+                
+                // Erfolgreich wenn Kalender-Zellen vorhanden sind (auch ohne Caption)
+                return calendarCells.length > 0 && (hasCaption || calendarCells.length > 20);
             }, { timeout: puppeteerOptions.timeout });
 
             logger.info('✅ Browser für kontinuierliche Überwachung initialisiert');
@@ -317,7 +339,7 @@ class AppointmentMonitor extends EventEmitter {
             await this.debugScreenshot('calendar_loaded', 'Kalender geladen');
 
             // Alle überwachten Termine prüfen
-            this.syncFoundAppointments(); // Synchronisiere vor der Prüfung
+            this.syncWithConfig(); // Synchronisiere vor der Prüfung
             
             const monitoredDates = this.configService.getMonitoredDates();
             logger.info(`📅 Prüfe ${monitoredDates.length} überwachte Termine...`);
@@ -333,6 +355,9 @@ class AppointmentMonitor extends EventEmitter {
 
             const availableCount = results.filter(r => r.available).length;
             logger.info(`✅ Terminprüfung abgeschlossen: ${availableCount}/${results.length} Termine verfügbar`);
+
+            // Store the results for later retrieval
+            this.lastResults = results;
 
             return results;
 
@@ -350,8 +375,8 @@ class AppointmentMonitor extends EventEmitter {
         try {
             logger.info('📅 Prüfe nur Termine (ohne Neuinitialisierung)...');
             
-            // Synchronisiere foundAppointments vor der Prüfung
-            this.syncFoundAppointments();
+            // Synchronisiere überwachte Termine vor der Prüfung
+            this.syncWithConfig();
             
             const monitoredDates = this.configService.getMonitoredDates();
             if (monitoredDates.length === 0) {
@@ -392,7 +417,6 @@ class AppointmentMonitor extends EventEmitter {
             logger.info(`📋 Sortierte Termine: ${sortedDates.join(', ')}`);
             
             const results = [];
-            let totalTimeSlots = 0;
             
             for (let i = 0; i < sortedDates.length; i++) {
                 const dateStr = sortedDates[i];
@@ -401,12 +425,7 @@ class AppointmentMonitor extends EventEmitter {
                 const result = await this.checkSingleDate(dateStr);
                 results.push(result);
                 
-                // Zeitslots zur Gesamtsumme hinzufügen
-                if (result.timeSlotsCount) {
-                    totalTimeSlots += result.timeSlotsCount;
-                }
-                
-                logger.info(`✅ Ergebnis für ${dateStr}: ${result.available ? 'VERFÜGBAR' : 'nicht verfügbar'} (${result.timeSlotsCount || 0} Zeitslots)`);
+                logger.info(`✅ Ergebnis für ${dateStr}: ${result.available ? 'VERFÜGBAR' : 'nicht verfügbar'}`);
                 
                 // Längere Pause zwischen Terminprüfungen für bessere Stabilität
                 if (i < sortedDates.length - 1) {
@@ -418,11 +437,13 @@ class AppointmentMonitor extends EventEmitter {
             this.checkCount = (this.checkCount || 0) + 1;
             this.lastCheckTime = new Date();
             
+            // Store the results for later retrieval
+            this.lastResults = results;
+            
             const availableCount = results.filter(r => r.available).length;
             const availableDates = results.filter(r => r.available).map(r => r.date);
             
             logger.info(`✅ Terminprüfung abgeschlossen: ${availableCount}/${results.length} Termine verfügbar`);
-            logger.info(`⏰ Insgesamt ${totalTimeSlots} verfügbare Zeitslots gefunden`);
             
             if (availableDates.length > 0) {
                 logger.info(`🎯 Verfügbare Termine: ${availableDates.join(', ')}`);
@@ -537,7 +558,7 @@ class AppointmentMonitor extends EventEmitter {
                     buttons.map(btn => ({
                         id: btn.id,
                         value: btn.value,
-                        textContent: btn.textContent,
+                        text: btn.textContent,
                         className: btn.className
                     }))
                 );
@@ -587,8 +608,35 @@ class AppointmentMonitor extends EventEmitter {
             });
             logger.info(`📅 Aktueller Monat nach Navigation: ${currentMonthAfter}`);
 
-            // Warten bis der Kalender geladen ist
-            await this.page.waitForSelector('td[data-value]', { timeout: 10000 });
+            // Warten bis der Kalender vollständig geladen ist
+            logger.info('⏳ Warte auf vollständigen Kalender...');
+            await this.page.waitForFunction(() => {
+                // Prüfe zuerst, ob die Kalender-Struktur existiert
+                const calendarBody = document.querySelector('.dx-calendar-body');
+                if (!calendarBody) {
+                    return false;
+                }
+                
+                // Prüfe ob mindestens ein Kalender-Element mit data-value existiert
+                const calendarCells = document.querySelectorAll('td[data-value]');
+                if (calendarCells.length === 0) {
+                    return false;
+                }
+                
+                // Prüfe ob die Kalender-Tabelle vollständig sichtbar ist
+                const calendarTable = document.querySelector('.dx-calendar-body table tbody');
+                if (!calendarTable) {
+                    return false;
+                }
+                
+                // Prüfe ob genügend Zellen vorhanden sind (mindestens 20 für einen Monat)
+                return calendarCells.length >= 20;
+            }, { timeout: 15000 });
+            
+            logger.info('✅ Kalender vollständig geladen');
+            
+            // Zusätzliche kurze Wartezeit für Stabilität
+            await new Promise(resolve => setTimeout(resolve, 1000));
 
             // Termin-Zelle suchen - robustere Implementierung wie im Tampermonkey-Script
             const cell = await this.page.$(`td[data-value="${dateStr}"]`);
@@ -671,55 +719,18 @@ class AppointmentMonitor extends EventEmitter {
                               !cellInfo.isOtherMonth &&
                               cellInfo.isClickable;
 
-            let availableTimeSlots = [];
-            let timeSlotsCount = 0;
-            
-            // Wenn der Termin verfügbar ist, extrahiere Zeitslot-Informationen direkt aus dem Kalender
-            if (isAvailable) {
-                logger.info(`🔍 Termin ${germanDate} ist verfügbar - extrahiere Zeitslots...`);
-                try {
-                    // Klicke auf die Termin-Zelle, damit die Wochenansicht rechts aktualisiert wird
-                    await cell.click();
-                    // Warte auf die Wochen-/Zeitslot-Ansicht (z.B. table.table-sm oder .btn-time-selector)
-                    await this.page.waitForSelector('.btn-time-selector, table.table-sm', { timeout: 10000 });
-                    // Extrahiere Zeitslots direkt aus der Wochenansicht
-                    availableTimeSlots = await this.page.evaluate(() => {
-                        const slots = [];
-                        const buttons = document.querySelectorAll('.btn-time-selector.btn-success');
-                        buttons.forEach(btn => {
-                            const value = btn.getAttribute('value');
-                            const text = btn.textContent.trim();
-                            if (value && text) {
-                                slots.push({ time: text, value, datetime: value });
-                            }
-                        });
-                        return slots;
-                    });
-                    timeSlotsCount = availableTimeSlots.length;
-                    logger.info(`🎯 Zeitslots für ${germanDate}: ${timeSlotsCount}`, availableTimeSlots.map(slot => slot.time));
-                    // KEINE NAVIGATION! Bleibe auf der Seite.
-                } catch (detailError) {
-                    logger.warn(`⚠️ Konnte Zeitslots für ${germanDate} nicht extrahieren:`, detailError);
-                    availableTimeSlots = [];
-                    timeSlotsCount = 0;
-                }
-            }
-
             const result = {
                 date: dateStr,
                 germanDate,
                 available: isAvailable,
                 classes: cellInfo.classes,
                 details: cellInfo,
-                availableTimeSlots: availableTimeSlots,
-                timeSlotsCount: availableTimeSlots.length,
                 timestamp: new Date().toISOString()
             };
 
             // Detailliertes Logging für Debugging
             logger.info(`🔍 Termin-Details für ${germanDate}:`, {
                 available: isAvailable,
-                timeSlotsCount: availableTimeSlots.length,
                 isGreen: cellInfo.isGreen,
                 hasAppointmentIndicator: cellInfo.hasAppointmentIndicator,
                 hasTimeText: cellInfo.hasTimeText,
@@ -734,42 +745,18 @@ class AppointmentMonitor extends EventEmitter {
             // Debug-Screenshot für die Terminprüfung
             await this.createScreenshot(`appointment_check_${dateStr.replace(/\//g, '_')}`, `Terminprüfung für ${germanDate}`);
 
-            if (result.available && !this.foundAppointments.has(dateStr)) {
-                this.foundAppointments.add(dateStr);
-                
-                // Speichere detaillierte Informationen
-                this.appointmentDetails[dateStr] = {
-                    timeSlotsCount: result.timeSlotsCount,
-                    availableTimeSlots: result.availableTimeSlots,
-                    lastUpdated: new Date().toISOString()
-                };
-                
-                // Versuche zusätzliche Informationen zu extrahieren
-                const appointmentInfo = await this.extractAppointmentInfo(cell);
-                
+            if (result.available) {
                 this.emit('appointmentFound', {
                     ...result,
-                    ...appointmentInfo,
                     url: this.targetUrl
                 });
                 
-                logger.info(`🎉 Verfügbarer Termin gefunden: ${germanDate} mit ${availableTimeSlots.length} Zeitslots`);
-            } else if (result.available) {
-                // Aktualisiere existierende Details
-                this.appointmentDetails[dateStr] = {
-                    timeSlotsCount: result.timeSlotsCount,
-                    availableTimeSlots: result.availableTimeSlots,
-                    lastUpdated: new Date().toISOString()
-                };
-                
-                logger.info(`✅ Termin ${germanDate} weiterhin verfügbar mit ${availableTimeSlots.length} Zeitslots`);
+                logger.info(`🎉 Verfügbarer Termin gefunden: ${germanDate}`);
             } else {
-                // Entferne Details wenn nicht mehr verfügbar
-                delete this.appointmentDetails[dateStr];
                 logger.info(`❌ Termin ${germanDate} nicht verfügbar - Details: ${cellInfo.classes}`);
             }
 
-            logger.info(`📊 ${germanDate} - Verfügbar: ${result.available ? '✅' : '❌'} (${availableTimeSlots.length} Zeitslots)`);
+            logger.info(`📊 ${germanDate} - Verfügbar: ${result.available ? '✅' : '❌'}`);
             return result;
 
         } catch (error) {
@@ -980,62 +967,6 @@ class AppointmentMonitor extends EventEmitter {
         }
     }
 
-    async extractAppointmentInfo(cell) {
-        try {
-            // Versuche zusätzliche Informationen zu extrahieren - erweitert wie im Tampermonkey-Script
-            const info = await cell.evaluate(el => {
-                const timeElement = el.querySelector('.appointment-time');
-                const typeElement = el.querySelector('.appointment-type');
-                
-                // Prüfe auf Zeitslots oder weitere Informationen
-                const allText = el.textContent.trim();
-                const hasTimeSlots = allText.includes(':') || allText.match(/\d{2}:\d{2}/);
-                
-                // Extrahiere mögliche Zeitinformationen
-                const timeRegex = /(\d{1,2}:\d{2})/g;
-                const timeMatches = allText.match(timeRegex);
-                
-                return {
-                    time: timeElement ? timeElement.textContent.trim() : 
-                          timeMatches ? timeMatches.join(', ') : 'Ganztägig',
-                    type: typeElement ? typeElement.textContent.trim() : 'Standard',
-                    fullText: allText,
-                    hasTimeSlots,
-                    availableSlots: timeMatches ? timeMatches.length : 1
-                };
-            });
-
-            // Zusätzliche Informationen aus dem Kontext extrahieren
-            const contextInfo = await this.page.evaluate(() => {
-                const selectedLocation = document.querySelector('select option:checked');
-                const selectedServices = Array.from(document.querySelectorAll('input[data-field]:checked'))
-                    .map(input => input.getAttribute('data-field'));
-                
-                return {
-                    location: selectedLocation ? selectedLocation.textContent.trim() : 'Unbekannt',
-                    services: selectedServices
-                };
-            });
-
-            return {
-                ...info,
-                ...contextInfo
-            };
-
-        } catch (error) {
-            logger.warn('⚠️ Konnte keine zusätzlichen Termin-Informationen extrahieren:', error);
-            return {
-                time: 'Nicht angegeben',
-                type: 'Standard',
-                fullText: '',
-                hasTimeSlots: false,
-                availableSlots: 1,
-                location: 'Unbekannt',
-                services: []
-            };
-        }
-    }
-
     // Debug-Funktion für Screenshots
     async createScreenshot(name, description) {
         try {
@@ -1111,7 +1042,6 @@ class AppointmentMonitor extends EventEmitter {
 
     removeWatchedDate(dateStr) {
         this.watchedDates.delete(dateStr);
-        this.foundAppointments.delete(dateStr);
         logger.info(`➖ Termin aus Überwachung entfernt: ${dateStr}`);
     }
 
@@ -1130,39 +1060,16 @@ class AppointmentMonitor extends EventEmitter {
             this.watchedDates.add(date);
         });
         
-        // Entferne gefundene Termine, die nicht mehr überwacht werden
-        const foundArray = Array.from(this.foundAppointments);
-        foundArray.forEach(date => {
-            if (!this.watchedDates.has(date)) {
-                this.foundAppointments.delete(date);
-            }
-        });
-        
-        logger.info(`🔄 Synchronisation abgeschlossen: ${this.watchedDates.size} überwachte Termine, ${this.foundAppointments.size} gefundene Termine`);
+        logger.info(`🔄 Synchronisation abgeschlossen: ${this.watchedDates.size} überwachte Termine`);
     }
 
     getWatchedDates() {
         return Array.from(this.watchedDates);
     }
 
-    getFoundAppointments() {
-        return Array.from(this.foundAppointments);
-    }
-
-    // Gefundene Termine zurücksetzen
-    clearFoundAppointments() {
-        this.foundAppointments.clear();
-        logger.info('🗑️ Alle gefundenen Termine zurückgesetzt');
-    }
-
-    // Einzelnen gefundenen Termin entfernen
-    removeFoundAppointment(dateStr) {
-        if (this.foundAppointments.has(dateStr)) {
-            this.foundAppointments.delete(dateStr);
-            logger.info(`🗑️ Gefundener Termin entfernt: ${dateStr}`);
-            return true;
-        }
-        return false;
+    // Get the last appointment check results
+    getLastResults() {
+        return this.lastResults || [];
     }
 
     getLastCheckTime() {
@@ -1285,28 +1192,11 @@ class AppointmentMonitor extends EventEmitter {
 
     // Status der Überwachung
     getMonitoringStatus() {
-        // Synchronisiere foundAppointments vor Statusabfrage
-        this.syncFoundAppointments();
+        // Synchronisiere überwachte Termine vor Statusabfrage
+        this.syncWithConfig();
         
         const isInitializing = this.monitoringInterval === 'initializing';
         const isActive = !!this.monitoringInterval && this.monitoringInterval !== null;
-        
-        // Berechne Gesamtanzahl der verfügbaren Zeitslots
-        let totalTimeSlots = 0;
-        const foundAppointmentsWithDetails = [];
-        
-        for (const dateStr of this.foundAppointments) {
-            // Versuche gespeicherte Zeitslot-Informationen zu finden
-            const appointmentData = this.appointmentDetails && this.appointmentDetails[dateStr];
-            const timeSlotsCount = appointmentData ? appointmentData.timeSlotsCount || 0 : 0;
-            
-            totalTimeSlots += timeSlotsCount;
-            foundAppointmentsWithDetails.push({
-                date: dateStr,
-                timeSlotsCount: timeSlotsCount,
-                availableTimeSlots: appointmentData ? appointmentData.availableTimeSlots || [] : []
-            });
-        }
         
         // Erweiterte Browser-Status-Prüfung
         let browserActive = false;
@@ -1322,9 +1212,6 @@ class AppointmentMonitor extends EventEmitter {
             isCurrentlyChecking: this.isMonitoringActive,
             lastCheckTime: this.lastCheckTime,
             consecutiveErrors: this.consecutiveErrors || 0,
-            foundAppointments: Array.from(this.foundAppointments || []),
-            foundAppointmentsWithDetails: foundAppointmentsWithDetails,
-            totalTimeSlots: totalTimeSlots,
             checkCount: this.checkCount || 0,
             browserActive: browserActive,
             targetUrl: this.targetUrl,
@@ -1357,25 +1244,22 @@ class AppointmentMonitor extends EventEmitter {
         }
    }
 
-    // Synchronisiere foundAppointments mit den aktuell überwachten Terminen
-    syncFoundAppointments() {
-        const monitoredDates = this.configService.getMonitoredDates();
-        const monitoredSet = new Set(monitoredDates);
+    // Synchronisiere mit configService
+    syncWithConfig() {
+        // Konfiguration neu laden
+        this.configService.loadConfig();
+        const configDates = this.configService.getMonitoredDates();
         
-        // Entferne gefundene Termine, die nicht mehr überwacht werden
-        for (const foundDate of this.foundAppointments) {
-            if (!monitoredSet.has(foundDate)) {
-                this.foundAppointments.delete(foundDate);
-                // Entferne auch die Details
-                delete this.appointmentDetails[foundDate];
-                logger.info(`🗑️ Gefundener Termin entfernt (nicht mehr überwacht): ${foundDate}`);
-            }
-        }
+        logger.info(`🔄 Synchronisation - Config hat ${configDates.length} Termine: ${JSON.stringify(configDates)}`);
+        logger.info(`🔄 Synchronisation - Monitor hat ${this.watchedDates.size} Termine: ${JSON.stringify(Array.from(this.watchedDates))}`);
         
-        // Aktualisiere watchedDates für Kompatibilität
-        this.watchedDates = monitoredSet;
+        // Aktualisiere watchedDates basierend auf configService
+        this.watchedDates.clear();
+        configDates.forEach(date => {
+            this.watchedDates.add(date);
+        });
         
-        logger.info(`🔄 Gefundene Termine synchronisiert: ${this.foundAppointments.size} von ${monitoredDates.length} überwachten Terminen`);
+        logger.info(`🔄 Synchronisation abgeschlossen: ${this.watchedDates.size} überwachte Termine`);
     }
 
     // Robuste Browser-Wiederherstellung

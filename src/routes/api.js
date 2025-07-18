@@ -51,8 +51,7 @@ router.get('/status', (req, res) => {
             targetUrl: monitor.getTargetUrl(),
             selectedServices: configService.getSelectedServices(),
             selectedLocation: configService.getSelectedLocation(),
-            watchedDates: monitor.getWatchedDates(),
-            foundAppointments: monitor.getFoundAppointments()
+            watchedDates: monitor.getWatchedDates()
         },
         notifications: notificationService.getServiceStatus(),
         config: configService.getConfig()
@@ -286,19 +285,29 @@ router.post('/monitoring/stop', async (req, res) => {
 // Überwachte Termine
 router.get('/dates', (req, res) => {
     const monitoredDates = configService.getMonitoredDates();
-    const foundAppointments = monitor.getFoundAppointments();
+    const monitoringStatus = monitor.getMonitoringStatus();
+    const lastResults = monitor.getLastResults();
     
     console.log('API /dates - Überwachte Termine:', monitoredDates);
-    console.log('API /dates - Gefundene Termine:', foundAppointments);
+    console.log('API /dates - Letzte Ergebnisse:', lastResults);
     
     const dates = monitoredDates.map(dateStr => {
         const [yyyy, mm, dd] = dateStr.split('/');
-        const isAvailable = foundAppointments.includes(dateStr);
+        
+        // Prüfe ob bereits geprüft wurde (wenn lastCheckTime existiert)
+        const hasBeenChecked = !!(monitoringStatus.lastCheckTime);
+        
+        // Finde das entsprechende Ergebnis aus der letzten Prüfung
+        const result = lastResults.find(r => r.date === dateStr);
+        const isAvailable = result ? result.available : false;
         
         return {
             date: dateStr,
             germanDate: `${dd}.${mm}.${yyyy}`,
-            isAvailable: isAvailable
+            isAvailable: isAvailable,
+            hasBeenChecked: hasBeenChecked,
+            timestamp: monitoringStatus.lastCheckTime,
+            lastCheckResult: result || null
         };
     });
     
@@ -606,7 +615,6 @@ router.get('/debug/config', (req, res) => {
         const config = {
             monitoredDates: configService.getMonitoredDates(),
             watchedDates: configService.getWatchedDates(),
-            foundAppointments: monitor.getFoundAppointments(),
             monitoringStatus: monitor.getMonitoringStatus(),
             rawConfig: configService.getConfig()
         };
