@@ -30,30 +30,22 @@ class UIManager {
     }
 
     /**
-     * Show alert message
+     * Show alert message (now using Toast system)
+     */
+    /**
+     * Show alert message (now using Toast system)
      */
     showAlert(message, type = 'info') {
-        // Remove existing alerts
-        const existingAlerts = document.querySelectorAll('.alert');
-        existingAlerts.forEach(alert => alert.remove());
-
-        // Create new alert
-        const alert = document.createElement('div');
-        alert.className = `alert alert-${type}`;
-        alert.textContent = message;
-
-        // Insert at top of content
-        const content = document.querySelector('.content');
-        if (content) {
-            content.insertBefore(alert, content.firstChild);
-
-            // Auto remove after 5 seconds
-            setTimeout(() => {
-                if (alert.parentNode) {
-                    alert.remove();
-                }
-            }, 5000);
-        }
+        // Use toast system instead of inline alerts
+        const titleMap = {
+            'success': 'Erfolg',
+            'error': 'Fehler',
+            'warning': 'Warnung',
+            'info': 'Information'
+        };
+        
+        const title = titleMap[type] || titleMap.info;
+        toastManager.show(title, message, type);
     }
 
     /**
@@ -80,35 +72,45 @@ class UIManager {
      * Update monitoring status
      */
     updateMonitoringStatus() {
-        const monitoringStatus = document.getElementById('monitoringStatus');
-        const monitoringText = document.getElementById('monitoringText');
+        const statusCard = document.getElementById('monitoringStatusCard');
+        const statusIcon = document.getElementById('monitoringStatusIcon');
+        const statusText = document.getElementById('monitoringText');
+        const statusDetails = document.getElementById('monitoringDetails');
         
-        if (monitoringStatus && monitoringText) {
+        if (statusCard && statusIcon && statusText && statusDetails) {
             const monitoring = this.systemData.detailedMonitoring || this.systemData.monitoring;
             
             if (monitoring && monitoring.isActive) {
                 if (monitoring.isInitializing) {
-                    monitoringStatus.className = 'status-dot status-warning';
-                    monitoringText.innerHTML = `Monitoring wird initialisiert...<br>
-                        <small>Browser wird gestartet und Seite geladen</small>`;
+                    statusCard.className = 'status-indicator initializing';
+                    statusIcon.textContent = '🔄';
+                    statusText.textContent = 'Monitoring wird initialisiert...';
+                    statusDetails.textContent = 'Browser wird gestartet und Seite geladen';
+                } else if (monitoring.isCurrentlyChecking) {
+                    statusCard.className = 'status-indicator checking';
+                    statusIcon.textContent = '🔍';
+                    statusText.textContent = 'Terminprüfung läuft...';
+                    statusDetails.textContent = 'Termine werden aktuell überprüft';
                 } else {
-                    monitoringStatus.className = 'status-dot status-active';
+                    statusCard.className = 'status-indicator active';
+                    statusIcon.textContent = '✅';
+                    statusText.textContent = 'Kontinuierliche Überwachung aktiv';
                     
-                    const checkingText = monitoring.isCurrentlyChecking ? ' (prüft gerade...)' : '';
                     const lastCheck = monitoring.lastCheckTime ? 
                         new Date(monitoring.lastCheckTime).toLocaleTimeString() : 'Noch kein Check';
                     
                     let intervalText = '';
                     if (monitoring.intervalMinutes !== undefined && monitoring.intervalSeconds !== undefined) {
-                        intervalText = ` - Intervall: ${monitoring.intervalMinutes}:${monitoring.intervalSeconds.toString().padStart(2, '0')} Min`;
+                        intervalText = ` • Intervall: ${monitoring.intervalMinutes}:${monitoring.intervalSeconds.toString().padStart(2, '0')} Min`;
                     }
                     
-                    monitoringText.innerHTML = `Kontinuierliche Überwachung aktiv${intervalText}${checkingText}<br>
-                        <small>Letzter Check: ${lastCheck}</small>`;
+                    statusDetails.textContent = `Letzter Check: ${lastCheck}${intervalText}`;
                 }
             } else {
-                monitoringStatus.className = 'status-dot status-inactive';
-                monitoringText.textContent = 'Monitoring inaktiv';
+                statusCard.className = 'status-indicator idle';
+                statusIcon.textContent = '⚪';
+                statusText.textContent = 'Monitoring inaktiv';
+                statusDetails.textContent = 'Klicken Sie auf "Monitoring starten" um zu beginnen';
             }
         }
     }
@@ -300,38 +302,49 @@ class UIManager {
         const locationSelect = document.getElementById('locationSelect');
         const currentLocation = document.getElementById('currentLocation');
         
-        if (locationSelect && locationData.locations) {
-            locationSelect.innerHTML = locationData.locations.map(location => 
-                `<option value="${location.value}" ${location.value === locationData.selected?.value ? 'selected' : ''}>
-                    ${location.name}
-                </option>`
-            ).join('');
+        if (!locationSelect || !currentLocation) {
+            console.error('Location UI elements not found!');
+            return;
         }
         
-        if (currentLocation && locationData.selected) {
-            currentLocation.textContent = locationData.selected.name;
+        if (!locationData || !locationData.available || !locationData.selected) {
+            console.error('Invalid locationData:', locationData);
+            locationSelect.innerHTML = '<option value="">Fehler beim Laden</option>';
+            currentLocation.textContent = 'Fehler beim Laden';
+            return;
         }
+        
+        // Update select options
+        locationSelect.innerHTML = '';
+        locationData.available.forEach(location => {
+            const option = document.createElement('option');
+            option.value = location.value;
+            option.textContent = location.name;
+            option.selected = location.value === locationData.selected.value;
+            locationSelect.appendChild(option);
+        });
+        
+        // Update current location display
+        currentLocation.textContent = locationData.selected.name || 'Nicht ausgewählt';
     }
 
     /**
      * Update services display
      */
     updateServicesDisplay(services) {
-        if (!services.serviceMapping || !services.selectedServices) return;
+        if (!Array.isArray(services)) {
+            console.error('Invalid services data:', services);
+            return;
+        }
         
-        const servicesContainer = document.getElementById('servicesContainer');
-        if (!servicesContainer) return;
-        
-        servicesContainer.innerHTML = Object.entries(services.serviceMapping).map(([key, service]) => {
-            const isSelected = services.selectedServices[key];
-            return `
-                <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
-                    <input type="checkbox" ${isSelected ? 'checked' : ''} 
-                           onchange="updateService('${key}', this.checked)">
-                    <span>${service.name}</span>
-                </label>
-            `;
-        }).join('');
+        services.forEach(service => {
+            const checkbox = document.getElementById(`service-${service.key}`);
+            if (checkbox) {
+                checkbox.checked = service.selected;
+            } else {
+                console.warn(`Checkbox for service ${service.key} not found`);
+            }
+        });
     }
 
     /**

@@ -283,13 +283,13 @@ class DataManager {
      * Check appointments immediately
      */
     async checkAppointments() {
+        // Update button to show checking status
+        this.updateCheckButton(true);
+        
         try {
-            uiManager.showAlert('Terminprüfung gestartet...', 'info');
-            
             const result = await apiClient.checkAppointments();
             
             if (result.success) {
-                uiManager.showAlert('Terminprüfung abgeschlossen', 'success');
                 // Reload dates to show updated results
                 await this.loadDates();
                 await this.loadSystemStatus();
@@ -302,6 +302,32 @@ class DataManager {
             console.error('Failed to check appointments:', error);
             uiManager.showAlert('Fehler bei der Terminprüfung', 'error');
             throw error;
+        } finally {
+            // Reset button to normal state
+            this.updateCheckButton(false);
+        }
+    }
+
+    /**
+     * Update check button status
+     */
+    updateCheckButton(isChecking) {
+        const btn = document.getElementById('checkNowBtn');
+        const icon = document.getElementById('checkStatusIcon');
+        const text = document.getElementById('checkBtnText');
+        
+        if (btn && icon && text) {
+            if (isChecking) {
+                btn.disabled = true;
+                btn.className = 'btn btn-warning';
+                icon.textContent = '⏳';
+                text.textContent = 'Prüfung läuft...';
+            } else {
+                btn.disabled = false;
+                btn.className = 'btn btn-success';
+                icon.textContent = '🔍';
+                text.textContent = 'Jetzt prüfen';
+            }
         }
     }
 

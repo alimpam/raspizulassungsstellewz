@@ -25,7 +25,7 @@ class App {
             // Update sound status in UI
             uiManager.updateSoundStatus();
             
-            // Initialize data loading
+            // Initialize data loading (this will call loadAllData internally)
             dataManager.initialize();
             
             // Setup global event handlers
@@ -33,9 +33,6 @@ class App {
             
             // Setup form validation
             this.setupFormValidation();
-            
-            // Initial data load
-            await this.loadInitialData();
             
             // Start refresh intervals
             this.startRefreshIntervals();
@@ -46,25 +43,6 @@ class App {
         } catch (error) {
             console.error('❌ Failed to initialize app:', error);
             uiManager.showAlert('Fehler beim Initialisieren der Anwendung', 'error');
-        }
-    }
-
-    /**
-     * Load initial data
-     */
-    async loadInitialData() {
-        try {
-            // Load data in correct order - dates first to initialize datesData
-            await dataManager.loadDates();
-            await this.loadSystemStatus();
-            await this.loadNotificationStatus();
-            await this.loadServices();
-            await this.loadLocation();
-            
-            console.log('✅ Initial data loaded successfully');
-        } catch (error) {
-            console.error('❌ Failed to load initial data:', error);
-            uiManager.showAlert('Fehler beim Laden der Anfangsdaten', 'error');
         }
     }
 
@@ -121,12 +99,6 @@ class App {
      */
     setupKeyboardShortcuts() {
         document.addEventListener('keydown', (e) => {
-            // Ctrl/Cmd + R: Refresh data
-            if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
-                e.preventDefault();
-                this.refreshAllData();
-            }
-            
             // Ctrl/Cmd + T: Test notification
             if ((e.ctrlKey || e.metaKey) && e.key === 't') {
                 e.preventDefault();
@@ -292,7 +264,7 @@ class App {
      */
     async refreshAllData() {
         console.log('Refreshing all data...');
-        uiManager.showAlert('Daten werden aktualisiert...', 'info');
+        // Removed the notification - silent refresh is better for UX
         await dataManager.loadAllData();
     }
 
@@ -974,6 +946,42 @@ window.addDate = () => {
         uiManager.showAlert('Bitte wählen Sie ein Datum aus', 'warning');
     }
 };
+
+// Open date picker with cross-browser support
+window.openDatePicker = () => {
+    const dateInput = document.getElementById('dateInput');
+    if (!dateInput) return;
+    
+    try {
+        // Method 1: Try showPicker() for modern browsers
+        if (dateInput.showPicker && typeof dateInput.showPicker === 'function') {
+            dateInput.showPicker();
+            return;
+        }
+    } catch (error) {
+        console.log('showPicker() not supported:', error.message);
+    }
+    
+    try {
+        // Method 2: Focus and click the input
+        dateInput.focus();
+        dateInput.click();
+        
+        // Method 3: Dispatch a click event
+        const clickEvent = new MouseEvent('click', {
+            view: window,
+            bubbles: true,
+            cancelable: true
+        });
+        dateInput.dispatchEvent(clickEvent);
+    } catch (error) {
+        console.log('Alternative methods failed:', error.message);
+        // Final fallback: just focus the input
+        dateInput.focus();
+    }
+};
+
+// Global function exports
 window.removeDate = (dateStr) => dataManager.removeDate(dateStr);
 window.checkNow = () => dataManager.checkAppointments();
 window.toggleMonitoring = () => app.toggleMonitoring();
