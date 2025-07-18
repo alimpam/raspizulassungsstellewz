@@ -638,86 +638,232 @@ select.form-control {
 /* Mobile-friendly date input styles */
 .mobile-friendly-input {
     display: flex;
+    flex-direction: row;
     gap: 12px;
-    align-items: stretch;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
+    align-items: flex-end;
+    margin-bottom: 24px;
 }
 
-.mobile-date-input {
-    position: relative;
+/* =========================
+   SIMPLE DATE PICKER STYLES
+   Optimiert für nebeneinander Layout
+   ========================= */
+
+.simple-date-picker {
     flex: 1;
-    min-width: 200px;
+    margin-bottom: 0;
 }
 
-.date-input-label {
+.date-label {
     display: block;
-    margin-bottom: 6px;
-    font-weight: 500;
-    color: #495057;
-    font-size: 14px;
+    margin-bottom: 12px;
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 16px;
+    letter-spacing: 0.3px;
 }
 
-.mobile-optimized-date {
-    width: 100% !important;
-    padding: 14px 50px 14px 14px !important;
-    border: 2px solid #e9ecef !important;
-    border-radius: 8px !important;
-    font-size: 16px !important; /* Prevents zoom on iOS */
-    background: white !important;
-    transition: all 0.2s ease !important;
+.simple-date-input {
+    width: 100%;
+    padding: 18px 24px;
+    border: 2px solid #e3f2fd;
+    border-radius: 16px;
+    font-size: 17px;
+    font-weight: 500;
+    color: #2c3e50;
+    background: white;
+    outline: none;
+    min-height: 60px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+    
+    /* Universal browser support */
     -webkit-appearance: none;
     -moz-appearance: none;
     appearance: none;
-    min-height: 48px; /* Touch-friendly minimum height */
-    position: relative;
-    z-index: 0; /* Ensure input is below button but still clickable */
+    
+    /* Mobile optimization */
+    font-size: 17px; /* Prevents zoom on iOS */
+    -webkit-text-size-adjust: 100%;
+    touch-action: manipulation;
 }
 
-.mobile-optimized-date:focus {
-    outline: none !important;
-    border-color: #007bff !important;
-    box-shadow: 0 0 0 3px rgba(0,123,255,0.15) !important;
+.simple-date-input:hover {
+    border-color: #2196f3;
+    box-shadow: 0 5px 20px rgba(33, 150, 243, 0.2);
+    transform: translateY(-1px);
 }
 
-.date-picker-btn {
-    position: absolute;
-    top: 50%;
-    right: 8px;
-    transform: translateY(-50%);
-    background: #007bff;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    width: 36px;
-    height: 36px;
-    font-size: 16px;
+.simple-date-input:focus {
+    border-color: #1976d2;
+    box-shadow: 0 0 0 4px rgba(25, 118, 210, 0.15);
+    transform: translateY(-2px);
+}
+
+/* Show native calendar icon */
+.simple-date-input::-webkit-calendar-picker-indicator {
     cursor: pointer;
-    z-index: 1; /* Reduced z-index to not block input */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s ease;
-    touch-action: manipulation; /* Prevents double-tap zoom */
-    pointer-events: auto; /* Ensure button is clickable */
+    border-radius: 8px;
+    padding: 10px;
+    background: linear-gradient(135deg, #2196f3, #1976d2);
+    color: white;
+    transition: all 0.3s ease;
+    margin-right: 4px;
+    width: 20px;
+    height: 20px;
 }
 
-.date-picker-btn:hover {
-    background: #0056b3;
-    transform: translateY(-50%) scale(1.05);
+.simple-date-input::-webkit-calendar-picker-indicator:hover {
+    background: linear-gradient(135deg, #1976d2, #1565c0);
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(25, 118, 210, 0.4);
 }
 
-.date-picker-btn:active {
-    transform: translateY(-50%) scale(0.98);
+/* =========================
+   RESPONSIVE OPTIMIZATIONS
+   ========================= */
+
+/* Mobile Devices (iOS & Android) */
+@media screen and (max-width: 768px) {
+    .mobile-friendly-input {
+        flex-direction: row; /* Auch auf Mobile nebeneinander */
+        gap: 8px;
+        margin-bottom: 20px;
+        align-items: flex-end; /* Label und Button alignment */
+    }
+    
+    .simple-date-picker {
+        flex: 1; /* Nimmt verfügbaren Platz ein */
+        margin-bottom: 0;
+    }
+    
+    .date-label {
+        font-size: 15px;
+        margin-bottom: 8px;
+    }
+    
+    .simple-date-input {
+        padding: 14px 18px;
+        min-height: 60px;
+        font-size: 16px; /* iOS zoom prevention */
+        border-radius: 12px;
+    }
+    
+    .add-date-btn {
+        width: 50px;
+        height: 50px;
+        font-size: 16px;
+        border-radius: 12px;
+        flex-shrink: 0; /* Verhindert Schrumpfen */
+    }
+    
+    .simple-date-input::-webkit-calendar-picker-indicator {
+        padding: 8px;
+        width: 18px;
+        height: 18px;
+    }
 }
 
+/* Desktop optimizations */
+@media screen and (min-width: 769px) {
+    .mobile-friendly-input {
+        gap: 16px;
+    }
+    
+    .add-date-btn:hover {
+        transform: translateY(-2px) scale(1.05) rotate(90deg);
+    }
+}
+
+/* iOS Specific Optimizations */
+@supports (-webkit-touch-callout: none) {
+    .universal-date-input {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+    
+    .date-input-container:focus-within {
+        transform: none; /* Reduce transform on iOS for stability */
+    }
+    
+    .universal-date-btn {
+        -webkit-backface-visibility: hidden;
+        backface-visibility: hidden;
+    }
+}
+
+/* Android Chrome Optimizations */
+@media screen and (-webkit-min-device-pixel-ratio: 1) and (max-width: 768px) {
+    .universal-date-input::-webkit-datetime-edit-text {
+        color: #2c3e50;
+        padding: 0 2px;
+    }
+    
+    .universal-date-input::-webkit-datetime-edit-month-field,
+    .universal-date-input::-webkit-datetime-edit-day-field,
+    .universal-date-input::-webkit-datetime-edit-year-field {
+        color: #2c3e50;
+    }
+}
+
+/* Desktop/Windows Optimizations */
+@media screen and (min-width: 769px) {
+    .date-input-container:hover .universal-date-btn {
+        transform: translateY(-50%) scale(1.1) rotate(5deg);
+    }
+    
+    .universal-date-input:hover {
+        padding-left: 24px;
+    }
+    
+    .universal-date-btn:hover {
+        box-shadow: 0 6px 20px rgba(33, 150, 243, 0.5);
+    }
+}
+
+/* High DPI Displays */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .date-input-container {
+        border-width: 1px;
+    }
+    
+    .universal-date-btn {
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+}
+
+/* Add Date Button - Kompakter Plus Button */
 .add-date-btn {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 14px 20px;
-    font-size: 16px;
-    min-height: 48px; /* Touch-friendly */
+    justify-content: center;
+    padding: 0;
+    font-size: 20px;
+    font-weight: 600;
+    width: 60px;
+    height: 60px; /* Match input field height */
+    background: linear-gradient(135deg, #2196f3, #1976d2);
+    border: none;
+    border-radius: 16px;
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 3px 12px rgba(33, 150, 243, 0.4);
+    flex-shrink: 0; /* Verhindert Schrumpfen */
+}
+
+.add-date-btn:hover {
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 6px 20px rgba(33, 150, 243, 0.5);
+    background: linear-gradient(135deg, #1976d2, #1565c0);
+}
+
+.add-date-btn:active {
+    transform: translateY(0) scale(0.95);
+    transition: all 0.1s ease;
+}
+
+.add-date-btn .btn-text {
     white-space: nowrap;
     touch-action: manipulation;
 }
@@ -788,35 +934,11 @@ select.form-control {
         align-items: stretch;
     }
     
-    /* Mobile-specific date input optimizations */
+    /* Ausnahme: mobile-friendly-input bleibt nebeneinander */
     .mobile-friendly-input {
-        flex-direction: column;
-        gap: 15px;
-    }
-    
-    .mobile-date-input {
-        min-width: unset;
-        width: 100%;
-    }
-    
-    .mobile-optimized-date {
-        font-size: 17px !important; /* Optimal for mobile */
-        padding: 16px 50px 16px 16px !important;
-        min-height: 52px !important; /* Larger touch target */
-    }
-    
-    .date-picker-btn {
-        width: 40px;
-        height: 40px;
-        font-size: 18px;
-        right: 6px;
-    }
-    
-    .add-date-btn {
-        padding: 16px 24px;
-        font-size: 17px;
-        min-height: 52px;
-        justify-content: center;
+        flex-direction: row !important;
+        align-items: flex-end !important;
+        gap: 8px !important;
     }
     
     /* Better button spacing on mobile */
@@ -909,7 +1031,7 @@ select.form-control {
 
 /* Additional mobile-specific optimizations */
 .mobile-optimized {
-    -webkit-tap-highlight-color: rgba(0, 123, 255, 0.3);
+    -webkit-tap-highlight-color: rgba(33, 150, 243, 0.3);
     -webkit-touch-callout: none;
     -webkit-user-select: none;
     -khtml-user-select: none;
@@ -929,100 +1051,31 @@ select.form-control {
     user-select: text;
 }
 
-/* iOS specific fixes */
-@supports (-webkit-touch-callout: none) {
-    .mobile-optimized-date {
-        /* Aktiviere native iOS Datumswähler */
-        -webkit-appearance: textfield !important;
-        appearance: textfield !important;
-        background-image: none !important;
-        padding-right: 14px !important;
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    body {
+        background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%);
     }
     
-    .mobile-optimized-date::-webkit-date-and-time-value {
-        text-align: left;
-        min-height: 1.2em;
+    .container {
+        background: #1a202c;
+        color: #e2e8f0;
     }
     
-    .mobile-optimized-date::-webkit-datetime-edit {
-        padding: 0;
-        margin: 0;
+    .card {
+        background: #2d3748;
+        border-color: #4a5568;
+        color: #e2e8f0;
     }
     
-    .mobile-optimized-date::-webkit-datetime-edit-fields-wrapper {
-        padding: 0;
-        margin: 0;
+    .universal-date-input {
+        background: #2d3748;
+        color: #e2e8f0;
+        border-color: #4a5568;
     }
     
-    .date-picker-btn {
-        display: none !important; /* Verstecke Button auf iOS */
-    }
-    
-    .date-input-wrapper {
-        position: relative;
-    }
-    
-    /* iOS Safari Datums-Input spezifische Regeln */
-    .mobile-optimized-date:focus {
-        -webkit-appearance: textfield !important;
-        appearance: textfield !important;
-    }
-}
-
-/* Android specific fixes */
-@media screen and (-webkit-min-device-pixel-ratio: 0) and (min-resolution: 0.001dpcm) {
-    .mobile-optimized-date {
-        background-image: none !important;
-        padding-right: 50px !important;
-    }
-}
-
-/* High DPI displays */
-@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
-    .date-picker-btn {
-        font-size: 18px;
-    }
-    
-    .mobile-optimized-date {
-        border-width: 1px !important;
-    }
-}
-
-/* Spezielle iOS Datums-Input Korrekturen */
-input[type="date"][data-ios-compatible="true"] {
-    -webkit-appearance: textfield;
-    appearance: textfield;
-    min-height: 48px;
-    padding: 14px 16px;
-    font-size: 17px; /* Verhindert Zoom auf iOS */
-    border: 2px solid #e9ecef;
-    border-radius: 8px;
-    background: white;
-    color: #495057;
-    width: 100%;
-    box-sizing: border-box;
-}
-
-input[type="date"][data-ios-compatible="true"]:focus {
-    border-color: #007bff;
-    box-shadow: 0 0 0 3px rgba(0,123,255,0.15);
-    outline: none;
-}
-
-/* Verstecke Kalender-Button bei iOS Geräten */
-@supports (-webkit-touch-callout: none) {
-    .date-picker-btn {
-        display: none !important;
-    }
-    
-    .date-input-wrapper::after {
-        content: "📅";
-        position: absolute;
-        right: 12px;
-        top: 50%;
-        transform: translateY(-50%);
-        pointer-events: none;
-        font-size: 18px;
-        color: #007bff;
+    .date-input-container {
+        border-color: #4a5568;
+        background: #2d3748;
     }
 }

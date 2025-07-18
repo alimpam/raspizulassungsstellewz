@@ -33,22 +33,17 @@
                 <div class="card">
                     <h2>📅 Terminverwaltung</h2>
                     <div class="input-group mobile-friendly-input">
-                        <div class="date-input-wrapper mobile-date-input">
-                            <label for="dateInput" class="date-input-label">📅 Datum auswählen</label>
-                            <input type="date" id="dateInput" 
-                                   placeholder="YYYY-MM-DD"
-                                   class="mobile-optimized-date"
+                        <div class="simple-date-picker">
+                            <label for="dateInput" class="date-label">📅 Datum auswählen</label>
+                            <input type="date" 
+                                   id="dateInput" 
+                                   class="simple-date-input"
                                    autocomplete="off"
-                                   data-ios-compatible="true"
-                                   pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}"
+                                   onclick="openDatePicker()"
                                    aria-label="Datum für Terminüberwachung auswählen">
-                            <button type="button" class="date-picker-btn" onclick="openDatePicker()" aria-label="Kalender öffnen">
-                                📅
-                            </button>
                         </div>
-                        <button class="btn add-date-btn" onclick="addDate()">
-                            <span class="btn-icon">➕</span>
-                            <span class="btn-text">Hinzufügen</span>
+                        <button class="btn add-date-btn" onclick="addDate()" aria-label="Datum hinzufügen">
+                            ➕
                         </button>
                     </div>
                     <ul class="date-list" id="dateList"></ul>

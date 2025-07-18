@@ -952,40 +952,6 @@ window.addDate = () => {
     }
 };
 
-// Open date picker with cross-browser and mobile support
-window.openDatePicker = () => {
-    const dateInput = document.getElementById('dateInput');
-    if (!dateInput) return;
-    
-    // Mobile detection
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    
-    try {
-        // For mobile devices, just focus the input - this will trigger the native picker
-        if (isMobile || isTouchDevice) {
-            dateInput.focus();
-            dateInput.click();
-            return;
-        }
-        
-        // For desktop: Try showPicker() for modern browsers
-        if (dateInput.showPicker && typeof dateInput.showPicker === 'function') {
-            dateInput.showPicker();
-            return;
-        }
-        
-        // Fallback: focus and click
-        dateInput.focus();
-        dateInput.click();
-        
-    } catch (error) {
-        console.log('Date picker error:', error.message);
-        // Final fallback: just focus the input
-        dateInput.focus();
-    }
-};
-
 // Global function exports
 window.removeDate = (dateStr) => dataManager.removeDate(dateStr);
 window.checkNow = () => dataManager.checkAppointments();
@@ -1000,6 +966,48 @@ window.playNotificationSequence = () => audioManager.playNotificationSequence();
 window.createFallbackBeep = () => audioManager.createFallbackBeep();
 window.debugAllEndpoints = () => app.debugAllEndpoints();
 
+// Universal date picker function for all platforms
+window.openDatePicker = () => {
+    const dateInput = document.getElementById('dateInput');
+    if (!dateInput) return;
+    
+    // Detect platform
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
+    const isDesktop = !isMobile;
+    
+    try {
+        // For mobile devices: focus triggers native picker
+        if (isMobile) {
+            dateInput.focus();
+            dateInput.click();
+            return;
+        }
+        
+        // For desktop: try modern showPicker() API first
+        if (isDesktop && dateInput.showPicker && typeof dateInput.showPicker === 'function') {
+            dateInput.showPicker();
+            return;
+        }
+        
+        // Fallback for all platforms: focus and click
+        dateInput.focus();
+        dateInput.click();
+        
+        // Additional fallback for Mac: trigger change event
+        if (isMac) {
+            setTimeout(() => {
+                dateInput.focus();
+                dateInput.dispatchEvent(new Event('click', { bubbles: true }));
+            }, 100);
+        }
+        
+    } catch (error) {
+        console.log('Date picker error (fallback to focus):', error);
+        dateInput.focus();
+    }
+};
+
 // Initialize app when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM loaded - initializing app...');
@@ -1007,9 +1015,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize mobile-specific enhancements
     initializeMobileEnhancements();
-    
-    // Setup iOS date input
-    setupiOSDateInput();
 });
 
 // Initialize app on window load as fallback
@@ -1018,75 +1023,31 @@ window.addEventListener('load', () => {
         console.log('Window loaded - initializing app as fallback...');
         app.initialize();
         initializeMobileEnhancements();
-        setupiOSDateInput();
     }
 });
 
-// Mobile-specific enhancements
+// Simplified mobile enhancements - no custom date picker needed
 function initializeMobileEnhancements() {
     const dateInput = document.getElementById('dateInput');
-    const datePickerBtn = document.querySelector('.date-picker-btn');
     
     if (!dateInput) return;
+    
+    // Set today's date as initial value
+    const today = new Date();
+    const todayString = today.getFullYear() + '-' + 
+                       String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+                       String(today.getDate()).padStart(2, '0');
+    dateInput.value = todayString;
     
     // Mobile detection
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
     
     if (isMobile || isTouchDevice) {
-        console.log('Mobile device detected - applying mobile enhancements');
+        console.log('Mobile device detected - applying basic mobile enhancements');
         
         // Add mobile-specific attributes
-        dateInput.setAttribute('inputmode', 'none'); // Prevents virtual keyboard on some devices
         dateInput.setAttribute('autocomplete', 'off');
-        
-        // Touch event for date picker button
-        if (datePickerBtn) {
-            datePickerBtn.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                datePickerBtn.style.transform = 'translateY(-50%) scale(0.95)';
-            }, { passive: false });
-            
-            datePickerBtn.addEventListener('touchend', (e) => {
-                e.preventDefault();
-                datePickerBtn.style.transform = 'translateY(-50%) scale(1)';
-                setTimeout(() => openDatePicker(), 50);
-            }, { passive: false });
-        }
-        
-        // Enhanced touch interaction for date input
-        dateInput.addEventListener('touchstart', (e) => {
-            // Add visual feedback
-            dateInput.style.borderColor = '#007bff';
-            dateInput.style.boxShadow = '0 0 0 3px rgba(0,123,255,0.15)';
-        }, { passive: true });
-        
-        dateInput.addEventListener('touchend', (e) => {
-            // Reset visual feedback
-            setTimeout(() => {
-                if (document.activeElement !== dateInput) {
-                    dateInput.style.borderColor = '#e9ecef';
-                    dateInput.style.boxShadow = 'none';
-                }
-            }, 300);
-        }, { passive: true });
-        
-        // Prevent zoom on input focus for iOS
-        dateInput.addEventListener('focus', () => {
-            document.querySelector('meta[name=viewport]').setAttribute(
-                'content', 
-                'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'
-            );
-        });
-        
-        dateInput.addEventListener('blur', () => {
-            setTimeout(() => {
-                document.querySelector('meta[name=viewport]').setAttribute(
-                    'content', 
-                    'width=device-width, initial-scale=1.0'
-                );
-            }, 300);
-        });
         
         // Add mobile-friendly class to body
         document.body.classList.add('mobile-optimized');
@@ -1097,83 +1058,5 @@ function initializeMobileEnhancements() {
             btn.style.minHeight = '48px';
             btn.style.touchAction = 'manipulation';
         });
-        
-        // Ensure date input works properly on mobile
-        const dateInput = document.getElementById('dateInput');
-        if (dateInput) {
-            // Remove any interference for mobile date pickers
-            dateInput.addEventListener('touchstart', function(e) {
-                // Allow native touch events for date input
-                e.stopPropagation();
-            }, { passive: true });
-            
-            dateInput.addEventListener('click', function(e) {
-                // Ensure clicking the input opens the native picker
-                if (this.type === 'date') {
-                    e.stopPropagation();
-                    this.focus();
-                    if (this.showPicker && typeof this.showPicker === 'function') {
-                        try {
-                            this.showPicker();
-                        } catch (err) {
-                            console.log('showPicker failed:', err);
-                        }
-                    }
-                }
-            });
-        }
     }
 }
-
-// iOS-spezifische Datums-Input-Behandlung
-function setupiOSDateInput() {
-    const dateInput = document.getElementById('dateInput');
-    
-    // Erkenne iOS
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
-                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    
-    if (isIOS && dateInput) {
-        console.log('🍎 iOS detected - setting up native date picker');
-        
-        // Entferne alle Event-Listener vom Button
-        const dateButton = document.querySelector('.date-picker-btn');
-        if (dateButton) {
-            dateButton.style.display = 'none';
-        }
-        
-        // Stelle sicher, dass das Input-Feld direkt anklickbar ist
-        dateInput.style.webkitAppearance = 'textfield';
-        dateInput.style.appearance = 'textfield';
-        dateInput.removeAttribute('readonly');
-        
-        // Zusätzliche iOS-spezifische Attribute
-        dateInput.setAttribute('inputmode', 'none');
-        dateInput.setAttribute('pattern', '[0-9]{4}-[0-9]{2}-[0-9]{2}');
-        
-        // Event-Listener für direktes Klicken
-        dateInput.addEventListener('touchstart', function(e) {
-            console.log('📱 iOS date input touched');
-            e.stopPropagation();
-            this.focus();
-            this.click();
-        }, { passive: true });
-        
-        dateInput.addEventListener('click', function(e) {
-            console.log('📱 iOS date input clicked');
-            e.stopPropagation();
-            this.focus();
-        });
-        
-        // Fokus-Event für iOS
-        dateInput.addEventListener('focus', function(e) {
-            console.log('📱 iOS date input focused');
-            // Auf iOS wird automatisch der native Datumswähler geöffnet
-        });
-        
-        console.log('✅ iOS date input setup completed');
-    }
-}
-
-// Setup iOS date input on DOMContentLoaded
-// (Already integrated in main DOMContentLoaded handler above)
