@@ -97,7 +97,7 @@ class UIManager {
                     statusText.textContent = 'Kontinuierliche Überwachung aktiv';
                     
                     const lastCheck = monitoring.lastCheckTime ? 
-                        new Date(monitoring.lastCheckTime).toLocaleTimeString() : 'Noch kein Check';
+                        new Date(monitoring.lastCheckTime).toLocaleTimeString('de-DE', { hour12: false }) : 'Noch kein Check';
                     
                     let intervalText = '';
                     if (monitoring.intervalMinutes !== undefined && monitoring.intervalSeconds !== undefined) {
@@ -204,7 +204,7 @@ class UIManager {
                             this.systemData.monitoring?.lastCheck;
             if (lastCheck) {
                 const lastCheckTime = new Date(lastCheck);
-                lastCheckEl.textContent = lastCheckTime.toLocaleTimeString('de-DE');
+                lastCheckEl.textContent = lastCheckTime.toLocaleTimeString('de-DE', { hour12: false });
             } else {
                 lastCheckEl.textContent = '--';
             }
@@ -276,10 +276,20 @@ class UIManager {
         }
 
         dateList.innerHTML = dates.map(date => {
-            const availabilityClass = date.isAvailable ? 'date-available' : '';
-            const availabilityText = date.isAvailable ? 
-                `✅ Verfügbar${date.lastCheckResult?.timestamp ? ' (' + new Date(date.lastCheckResult.timestamp).toLocaleTimeString() + ')' : ''}` :
-                `❌ Nicht verfügbar${date.lastCheckResult?.timestamp ? ' (' + new Date(date.lastCheckResult.timestamp).toLocaleTimeString() + ')' : ''}`;
+            let availabilityClass = '';
+            let availabilityText;
+            
+            if (date.isAvailable) {
+                availabilityClass = 'date-available';
+                availabilityText = `✅ Verfügbar${date.lastCheckResult?.timestamp ? ' (' + new Date(date.lastCheckResult.timestamp).toLocaleTimeString('de-DE', { hour12: false }) + ')' : ''}`;
+            } else if (date.lastCheckResult?.timestamp) {
+                // Termin wurde geprüft und ist nicht verfügbar
+                availabilityText = `❌ Nicht verfügbar (${new Date(date.lastCheckResult.timestamp).toLocaleTimeString('de-DE', { hour12: false })})`;
+            } else {
+                // Termin wurde noch nicht geprüft
+                availabilityClass = 'date-pending';
+                availabilityText = `⏳ Noch nicht geprüft`;
+            }
             
             return `
                 <div class="date-item ${availabilityClass}">

@@ -423,7 +423,7 @@ class App {
                     
                     const checkingText = monitoring.isCurrentlyChecking ? ' (prüft gerade...)' : '';
                     const lastCheck = monitoring.lastCheckTime ? 
-                        new Date(monitoring.lastCheckTime).toLocaleTimeString() : 'Noch kein Check';
+                        new Date(monitoring.lastCheckTime).toLocaleTimeString('de-DE', { hour12: false }) : 'Noch kein Check';
                     
                     let intervalText = '';
                     if (monitoring.intervalMinutes !== undefined && monitoring.intervalSeconds !== undefined) {
@@ -537,7 +537,7 @@ class App {
                             this.systemData.monitoring?.lastCheck;
             if (lastCheck) {
                 const lastCheckTime = new Date(lastCheck);
-                lastCheckEl.textContent = lastCheckTime.toLocaleTimeString('de-DE');
+                lastCheckEl.textContent = lastCheckTime.toLocaleTimeString('de-DE', { hour12: false });
             } else {
                 lastCheckEl.textContent = '--';
             }

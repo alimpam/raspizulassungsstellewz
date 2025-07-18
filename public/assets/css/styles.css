@@ -349,6 +349,12 @@ select.form-control {
     border-color: #28a745;
 }
 
+.date-pending {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+    border-left: 4px solid #ffc107;
+    border-color: #ffc107;
+}
+
 .date-item strong {
     color: #495057;
     font-size: 1.1em;
@@ -365,6 +371,15 @@ select.form-control {
 
 .date-available small {
     color: #155724;
+    font-weight: 500;
+}
+
+.date-pending strong {
+    color: #856404;
+}
+
+.date-pending small {
+    color: #856404;
     font-weight: 500;
 }
 
