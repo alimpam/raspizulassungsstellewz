@@ -51,6 +51,24 @@
                         <span id="checkStatusIcon">🔍</span>
                         <span id="checkBtnText">Jetzt prüfen</span>
                     </button>
+                    
+                    <!-- iOS Audio Activation Button (only shown on iOS devices) -->
+                    <div id="iosAudioActivation" style="display: none; margin-top: 15px; padding: 15px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                            <span style="font-size: 24px;">📱</span>
+                            <div>
+                                <div style="font-weight: 600; color: #856404;">Audio-Benachrichtigungen für iOS</div>
+                                <div style="font-size: 0.9em; color: #856404;">Tippen Sie den Button, um Sound-Benachrichtigungen zu aktivieren</div>
+                            </div>
+                        </div>
+                        <button class="btn" onclick="activateIOSAudio()" id="iosAudioBtn" style="background: #ffc107; color: #212529;">
+                            🔊 Audio aktivieren
+                        </button>
+                        <button class="btn" onclick="testAudio()" style="background: #17a2b8; color: white; margin-left: 10px;">
+                            🔔 Audio testen
+                        </button>
+                        <div id="iosAudioStatus" style="margin-top: 8px; font-size: 0.85em; color: #6c757d;"></div>
+                    </div>
                 </div>
 
                 <div class="card">
