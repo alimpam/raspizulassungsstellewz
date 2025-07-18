@@ -1051,7 +1051,7 @@ class AppointmentMonitor extends EventEmitter {
     // Synchronisation mit configService
     syncWithConfig() {
         // Konfiguration neu laden
-        this.configService.config = this.configService.loadConfig();
+        this.configService.loadConfig();
         const configDates = this.configService.getMonitoredDates();
         
         logger.info(`🔄 Synchronisation - Config hat ${configDates.length} Termine: ${JSON.stringify(configDates)}`);
