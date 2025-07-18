@@ -222,6 +222,9 @@ class AppointmentMonitor extends EventEmitter {
             this.lastCheckTime = new Date();
             logger.info('🔍 Starte Terminprüfung...');
 
+            // Sicherstellen, dass Browser aktiv ist BEVOR wir versuchen, eine Seite zu laden
+            await this.ensureBrowserIsActive();
+
             const puppeteerOptions = this.configService.getPuppeteerOptions();
             const selectedServices = this.configService.getSelectedServices();
             const serviceMapping = this.configService.getServiceMapping();
@@ -1254,8 +1257,20 @@ class AppointmentMonitor extends EventEmitter {
                 return;
             }
 
-            // Prüfe ob Browser noch läuft
-            if (this.browser.isConnected && this.browser.isConnected()) {
+            // Prüfe ob Browser noch läuft - robustere Prüfung
+            let browserConnected = false;
+            try {
+                browserConnected = this.browser.isConnected && this.browser.isConnected();
+                // Zusätzliche Prüfung: Versuche Browser-Version abzufragen
+                if (browserConnected) {
+                    await this.browser.version();
+                }
+            } catch (browserError) {
+                logger.warn('⚠️ Browser-Verbindungstest fehlgeschlagen:', browserError);
+                browserConnected = false;
+            }
+
+            if (browserConnected) {
                 // Browser läuft, prüfe Page
                 try {
                     if (this.page.isClosed()) {
