@@ -180,6 +180,41 @@
             overflow-y: auto;
         }
 
+        .appointment-event-item {
+            background: #e8f5e8;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            border-radius: 4px;
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .appointment-event-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .appointment-event-item.available {
+            background: #d4edda;
+            border-color: #c3e6cb;
+        }
+
+        .appointment-event-item.unavailable {
+            background: #f8d7da;
+            color: #721c24;
+            border-color: #f5c6cb;
+        }
+
+        .appointment-event-time {
+            font-weight: bold;
+            font-size: 11px;
+            opacity: 0.8;
+        }
+
         .footer {
             background: #f8f9fa;
             text-align: center;
@@ -411,14 +446,19 @@
                         <button class="btn" onclick="playNotificationSequence()" style="background-color: #17a2b8;">
                             🎵 Beep + Sound Test
                         </button>
+                        <button class="btn" onclick="testAppointmentEvent()" style="background-color: #6f42c1;">
+                            📅 Termin Event Test
+                        </button>
                     </div>
                 </div>
             </div>
 
             <div class="card">
-                <h2>📊 System-Logs</h2>
-                <div class="log-container" id="logContainer">
-                    Logs werden geladen...
+                <h2>� Verfügbare Termine</h2>
+                <div class="log-container" id="appointmentEvents">
+                    <div class="appointment-event-item">
+                        <i>Noch keine Termine verfügbar geworden...</i>
+                    </div>
                 </div>
             </div>
         </div>
@@ -433,6 +473,10 @@
         
         // Global dates data to ensure consistency
         let datesData = [];
+        
+        // Appointment events for user-friendly logging
+        let appointmentEvents = [];
+        let previousAppointmentStates = new Map(); // Track previous states for change detection
         
         let logMessages = [];
         let lastTotalAvailableAppointments = parseInt(localStorage.getItem('lastAvailableCount') || '0');
@@ -602,6 +646,82 @@
             showAlert('Test sound triggered! Check console for details.', 'success');
         }
 
+        // Appointment event management functions
+        function addAppointmentEvent(message, type = 'available') {
+            const timestamp = new Date().toLocaleTimeString('de-DE');
+            const event = {
+                message,
+                type,
+                timestamp,
+                id: Date.now() + Math.random()
+            };
+            
+            appointmentEvents.unshift(event); // Add to beginning
+            
+            // Keep only the last 10 events
+            if (appointmentEvents.length > 10) {
+                appointmentEvents = appointmentEvents.slice(0, 10);
+            }
+            
+            updateAppointmentEventsDisplay();
+        }
+
+        function updateAppointmentEventsDisplay() {
+            const container = document.getElementById('appointmentEvents');
+            if (!container) return;
+            
+            if (appointmentEvents.length === 0) {
+                container.innerHTML = '<div class="appointment-event-item"><i>Noch keine Termine verfügbar geworden...</i></div>';
+                return;
+            }
+            
+            container.innerHTML = appointmentEvents.map(event => `
+                <div class="appointment-event-item ${event.type}">
+                    <span>${event.message}</span>
+                    <span class="appointment-event-time">${event.timestamp}</span>
+                </div>
+            `).join('');
+        }
+
+        function detectAppointmentChanges(newDates) {
+            if (!Array.isArray(newDates)) return;
+            
+            newDates.forEach(dateInfo => {
+                const key = dateInfo.date;
+                const previousState = previousAppointmentStates.get(key);
+                
+                if (previousState === undefined) {
+                    // First time seeing this date
+                    previousAppointmentStates.set(key, dateInfo.isAvailable);
+                } else if (previousState !== dateInfo.isAvailable) {
+                    // State changed
+                    if (dateInfo.isAvailable) {
+                        addAppointmentEvent(
+                            `Termin ${dateInfo.germanDate} ist jetzt verfügbar! 🎉`,
+                            'available'
+                        );
+                    } else {
+                        addAppointmentEvent(
+                            `Termin ${dateInfo.germanDate} ist nicht mehr verfügbar`,
+                            'unavailable'
+                        );
+                    }
+                    previousAppointmentStates.set(key, dateInfo.isAvailable);
+                }
+            });
+        }
+
+        // Test function for appointment events
+        function testAppointmentEvent() {
+            const testDate = new Date();
+            const formattedDate = testDate.toLocaleDateString('de-DE');
+            addAppointmentEvent(
+                `TEST: Termin ${formattedDate} ist jetzt verfügbar! 🎉`,
+                'available'
+            );
+            showAlert('Test-Event hinzugefügt!', 'success');
+        }
+
         // Debug-Funktion zum Testen aller API-Endpunkte
         async function debugAllEndpoints() {
             console.log('=== DEBUG: Teste alle API-Endpunkte ===');
@@ -655,6 +775,9 @@
             
             // Initialize sound notification
             initSoundNotification();
+            
+            // Initialize appointment events display
+            updateAppointmentEventsDisplay();
             
             // Sofortiges Debugging
             setTimeout(debugAllEndpoints, 1000);
@@ -918,6 +1041,9 @@
             try {
                 const response = await fetch('/api/dates');
                 const dates = await response.json();
+                
+                // Detect appointment changes before updating global data
+                detectAppointmentChanges(dates);
                 
                 // Update global datesData for consistent counter logic
                 datesData = dates;
