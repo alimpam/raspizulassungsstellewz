@@ -716,16 +716,12 @@ class AppointmentMonitor extends EventEmitter {
                 };
             });
 
-            // Verbesserte Verfügbarkeitsprüfung - weniger restriktiv
+            // Vereinfachte Verfügbarkeitsprüfung basierend auf disabled-date Klasse
             // Ein Termin ist verfügbar wenn:
-            // 1. Er ist grün ODER hat Terminhinweise
-            // 2. Er ist nicht deaktiviert
-            // 3. Er ist nicht aus einem anderen Monat
-            // 4. Er ist grundsätzlich klickbar
-            const isAvailable = (cellInfo.isGreen || cellInfo.hasAppointmentIndicator || cellInfo.hasTimeText) &&
-                              !cellInfo.isDisabled &&
-                              !cellInfo.isOtherMonth &&
-                              cellInfo.isClickable;
+            // 1. Er hat NICHT die Klasse 'disabled-date'
+            // 2. Er ist nicht aus einem anderen Monat
+            const isAvailable = !cellInfo.classes.includes('disabled-date') &&
+                              !cellInfo.isOtherMonth;
 
             const result = {
                 date: dateStr,
@@ -739,12 +735,8 @@ class AppointmentMonitor extends EventEmitter {
             // Detailliertes Logging für Debugging
             logger.info(`🔍 Termin-Details für ${germanDate}:`, {
                 available: isAvailable,
-                isGreen: cellInfo.isGreen,
-                hasAppointmentIndicator: cellInfo.hasAppointmentIndicator,
-                hasTimeText: cellInfo.hasTimeText,
-                isDisabled: cellInfo.isDisabled,
+                hasDisabledDate: cellInfo.classes.includes('disabled-date'),
                 isOtherMonth: cellInfo.isOtherMonth,
-                isClickable: cellInfo.isClickable,
                 classes: cellInfo.classes,
                 textContent: cellInfo.textContent,
                 backgroundColor: cellInfo.backgroundColor
