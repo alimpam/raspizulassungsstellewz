@@ -122,20 +122,20 @@ class AppointmentMonitor extends EventEmitter {
             const selectedServices = this.configService.getSelectedServices();
             const serviceMapping = this.configService.getServiceMapping();
 
-            // Seite laden - weniger restriktive Wartezeit
+            // Seite laden - Pi-optimierte Wartezeit
             logger.info(`🌐 Lade Seite: ${this.targetUrl}`);
             await this.page.goto(this.targetUrl, { 
                 waitUntil: 'domcontentloaded',
-                timeout: 30000
+                timeout: 90000 // Erhöht auf 90 Sekunden für Pi
             });
             
             // Warte zusätzlich kurz auf dynamische Inhalte
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            await new Promise(resolve => setTimeout(resolve, 3000)); // Erhöht auf 3 Sekunden für Pi
 
             // Warten auf das Formular
             logger.info('⏳ Warte auf Formular...');
             await this.page.waitForSelector('#form-add-concern-items', {
-                timeout: puppeteerOptions.timeout
+                timeout: 60000 // Erhöht auf 60 Sekunden für Pi
             });
 
             // Services auswählen
@@ -272,11 +272,11 @@ class AppointmentMonitor extends EventEmitter {
             }
             await this.page.goto(this.targetUrl, { 
                 waitUntil: 'domcontentloaded',
-                timeout: 30000
+                timeout: 90000 // Erhöht auf 90 Sekunden für Pi
             });
             
             // Warte zusätzlich kurz auf dynamische Inhalte
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            await new Promise(resolve => setTimeout(resolve, 3000)); // Erhöht auf 3 Sekunden für Pi
 
             // Screenshot nach dem Laden
             await this.debugScreenshot('initial_load', 'Seite initial geladen');
@@ -286,7 +286,7 @@ class AppointmentMonitor extends EventEmitter {
                 logger.info('⏳ Warte auf Formular...');
             }
             await this.page.waitForSelector('#form-add-concern-items', {
-                timeout: puppeteerOptions.timeout
+                timeout: 60000 // Erhöht auf 60 Sekunden für Pi
             });
 
             logger.info('📋 Formular geladen');
@@ -456,7 +456,7 @@ class AppointmentMonitor extends EventEmitter {
             // Optional: Seite refreshen alle paar Checks (wie im Tampermonkey-Script)
             if (this.checkCount && this.checkCount % 3 === 0) {
                 logger.info('🔄 Refreshe Seite für bessere Stabilität...');
-                await this.page.reload({ waitUntil: 'networkidle0' });
+                await this.page.reload({ waitUntil: 'networkidle0', timeout: 90000 }); // Pi-optimiertes Timeout
                 await this.page.waitForFunction(() => {
                     const selectors = [
                         '.dx-calendar-caption-button .dx-button-text',
@@ -473,7 +473,7 @@ class AppointmentMonitor extends EventEmitter {
                         }
                     }
                     return false;
-                }, { timeout: 30000 });
+                }, { timeout: 60000 }); // Erhöht auf 60 Sekunden für Pi
             }
             
             // Sortiere Termine nach Datum für effiziente Navigation
@@ -622,7 +622,7 @@ class AppointmentMonitor extends EventEmitter {
                 logger.info('✅ Submit-Button gefunden, klicke darauf...');
                 await submitButton.click();
                 logger.info('⏳ Warte auf Navigation zur Datumsauswahl...');
-                await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 });
+                await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 90000 }); // Erhöht auf 90 Sekunden für Pi
                 logger.info('✅ Navigation zur Datumsauswahl erfolgreich!');
             } else {
                 logger.error('❌ Submit-Button (#submitButton) nicht gefunden!');
@@ -643,7 +643,7 @@ class AppointmentMonitor extends EventEmitter {
                 if (firstSubmitButton) {
                     logger.info('🔄 Versuche mit erstem verfügbaren Submit-Button...');
                     await firstSubmitButton.click();
-                    await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 });
+                    await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 90000 }); // Erhöht auf 90 Sekunden für Pi
                 } else {
                     throw new Error('Kein Submit-Button gefunden!');
                 }
@@ -1229,6 +1229,7 @@ class AppointmentMonitor extends EventEmitter {
         // Status sofort auf "initializing" setzen für sofortiges UI-Feedback
         this.monitoringInterval = 'initializing';
         this.isMonitoringActive = true;
+        this.monitoringStartTime = Date.now(); // Für Browser-Neustart-Timer
         
         try {
             // Synchronisation mit Config beim Start
@@ -1248,6 +1249,16 @@ class AppointmentMonitor extends EventEmitter {
                 try {
                     logger.info('🔍 Regelmäßige Terminprüfung...');
                     
+                    // Prüfe ob Browser-Neustart alle 2 Stunden nötig ist
+                    const uptimeHours = (Date.now() - this.monitoringStartTime) / (1000 * 60 * 60);
+                    if (uptimeHours >= 2) {
+                        logger.info('🔄 Präventiver Browser-Neustart nach 2 Stunden...');
+                        await this.cleanupBrowser();
+                        await this.initializeForContinuousMonitoring();
+                        this.monitoringStartTime = Date.now(); // Timer zurücksetzen
+                        logger.info('✅ Präventiver Browser-Neustart abgeschlossen');
+                    }
+                    
                     // Robuste Browser-Prüfung und Wiederherstellung
                     await this.ensureBrowserIsActive();
                     
@@ -1259,19 +1270,31 @@ class AppointmentMonitor extends EventEmitter {
                     
                 } catch (error) {
                     this.consecutiveErrors = (this.consecutiveErrors || 0) + 1;
-                    logger.error(`❌ Fehler bei regelmäßiger Terminprüfung (${this.consecutiveErrors}/3):`, error);
+                    logger.error(`❌ Fehler bei regelmäßiger Terminprüfung (${this.consecutiveErrors}/6):`, error);
                     
-                    // Bei wiederholten Fehlern die Überwachung pausieren
-                    if (this.consecutiveErrors >= 3) {
+                    // Bei 3+ Fehlern versuche Browser-Neustart
+                    if (this.consecutiveErrors >= 3 && this.consecutiveErrors < 6) {
+                        logger.warn('⚠️ Browser-Probleme erkannt, versuche Browser-Neustart...');
+                        try {
+                            await this.cleanupBrowser();
+                            await this.initializeForContinuousMonitoring();
+                            logger.info('✅ Browser erfolgreich neu gestartet');
+                        } catch (restartError) {
+                            logger.error('❌ Browser-Neustart fehlgeschlagen:', restartError);
+                        }
+                    }
+                    
+                    // Bei wiederholten Fehlern die Überwachung pausieren (erhöht auf 6)
+                    if (this.consecutiveErrors >= 6) {
                         logger.warn('⚠️ Zu viele aufeinanderfolgende Fehler, pausiere Überwachung');
                         this.stopContinuousMonitoring();
                         
-                        // Nach 30 Minuten wieder versuchen
+                        // Nach 10 Minuten wieder versuchen (reduziert von 30)
                         setTimeout(() => {
                             logger.info('🔄 Versuche Überwachung nach Fehlerpause neu zu starten...');
                             this.consecutiveErrors = 0;
                             this.startContinuousMonitoring(this.monitoringIntervalMinutes, this.monitoringIntervalSeconds);
-                        }, 30 * 60 * 1000);
+                        }, 10 * 60 * 1000);
                     }
                 }
             }, intervalMs);
@@ -1465,7 +1488,7 @@ class AppointmentMonitor extends EventEmitter {
                 await this.page.waitForFunction(() => {
                     return document.querySelector('.dx-calendar-caption-button .dx-button-text') ||
                            document.querySelector('td[data-value]');
-                }, { timeout: 10000 });
+                }, { timeout: 20000 }); // Erhöht auf 20 Sekunden für Pi
                 return;
             }
             
@@ -1475,17 +1498,22 @@ class AppointmentMonitor extends EventEmitter {
             await this.page.waitForFunction(() => {
                 return document.querySelector('.dx-calendar-caption-button .dx-button-text') ||
                        document.querySelector('td[data-value]');
-            }, { timeout: 10000 });
+            }, { timeout: 20000 }); // Erhöht auf 20 Sekunden für Pi
             
         } catch (error) {
             logger.error('❌ Fehler beim Sicherstellen der Kalenderansicht:', error);
             // Letzter Fallback: Komplett neu initialisieren
             logger.info('🔄 Letzter Fallback: Seite neu laden...');
-            await this.page.reload({ waitUntil: 'networkidle0' });
-            await this.page.waitForFunction(() => {
-                return document.querySelector('.dx-calendar-caption-button .dx-button-text') ||
-                       document.querySelector('td[data-value]');
-            }, { timeout: 15000 });
+            try {
+                await this.page.reload({ waitUntil: 'networkidle0', timeout: 30000 }); // Erhöht auf 30 Sekunden für Pi
+                await this.page.waitForFunction(() => {
+                    return document.querySelector('.dx-calendar-caption-button .dx-button-text') ||
+                           document.querySelector('td[data-value]');
+                }, { timeout: 20000 }); // Erhöht auf 20 Sekunden für Pi
+            } catch (reloadError) {
+                logger.warn('⚠️ Seiten-Neuladung fehlgeschlagen - Browser-Neustart erforderlich');
+                throw new Error('Kalenderansicht nicht erreichbar');
+            }
         }
     }
 

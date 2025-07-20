@@ -1,0 +1,26 @@
+[Unit]
+Description=Terminüberwachung KFZ-Zulassung Service
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=apexpam
+Group=apexpam
+WorkingDirectory=/home/apexpam/repos/raspizulassungsstellewz
+ExecStart=/bin/bash /home/apexpam/repos/raspizulassungsstellewz/scripts/start-app.sh
+Restart=always
+RestartSec=15
+StandardOutput=append:/home/apexpam/repos/raspizulassungsstellewz/src/logs/service.log
+StandardError=append:/home/apexpam/repos/raspizulassungsstellewz/src/logs/service-error.log
+
+# Umgebungsvariablen
+Environment=NODE_ENV=development
+Environment=NODE_OPTIONS=--max-old-space-size=512
+
+# Limits für Raspberry Pi
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target
