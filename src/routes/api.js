@@ -34,7 +34,10 @@ router.get('/', (req, res) => {
             'DELETE /api/dates/:year/:month/:day': 'Termin entfernen',
             'POST /api/check': 'Sofortige Terminprüfung',
             'POST /api/test-notification': 'Test-Benachrichtigung senden',
-            'GET /api/notifications/status': 'Status der Benachrichtigungsdienste'
+            'GET /api/notifications/status': 'Status der Benachrichtigungsdienste',
+            'GET /api/notifications/telegram': 'Telegram-Einstellungen anzeigen',
+            'PUT /api/notifications/telegram': 'Telegram-Einstellungen aktualisieren',
+            'POST /api/notifications/telegram/test': 'Test-Telegram-Nachricht senden'
         }
     });
 });
@@ -424,6 +427,88 @@ router.post('/test-notification', async (req, res) => {
 // Benachrichtigungsstatus
 router.get('/notifications/status', (req, res) => {
     res.json(notificationService.getServiceStatus());
+});
+
+// Telegram-Einstellungen
+router.get('/notifications/telegram', (req, res) => {
+    const config = configService.getConfig();
+    const telegramConfig = config.notifications?.telegram || {
+        enabled: false,
+        onlyVerifiedChat: true,
+        allowedChatId: null
+    };
+    
+    res.json({
+        ...telegramConfig,
+        botConfigured: !!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
+        currentChatId: process.env.TELEGRAM_CHAT_ID || null
+    });
+});
+
+router.put('/notifications/telegram', (req, res) => {
+    try {
+        const { enabled, onlyVerifiedChat } = req.body;
+        
+        // Hole aktuelle Konfiguration
+        const config = configService.getConfig();
+        
+        // Aktualisiere Telegram-Einstellungen
+        config.notifications = config.notifications || {};
+        config.notifications.telegram = {
+            enabled: enabled === true,
+            onlyVerifiedChat: onlyVerifiedChat !== false, // Standard: true
+            allowedChatId: process.env.TELEGRAM_CHAT_ID || null
+        };
+        
+        // Speichere Konfiguration
+        const success = configService.updateConfig(config);
+        
+        if (success) {
+            res.json({ 
+                success: true, 
+                message: 'Telegram-Einstellungen aktualisiert',
+                config: config.notifications.telegram
+            });
+        } else {
+            res.status(500).json({ 
+                success: false, 
+                message: 'Fehler beim Speichern der Telegram-Einstellungen' 
+            });
+        }
+    } catch (error) {
+        res.status(400).json({ 
+            success: false, 
+            message: error.message 
+        });
+    }
+});
+
+// Test-Telegram-Nachricht
+router.post('/notifications/telegram/test', async (req, res) => {
+    try {
+        const config = configService.getConfig();
+        
+        // Prüfe ob Telegram aktiviert ist
+        if (!config.notifications?.telegram?.enabled) {
+            return res.status(400).json({
+                success: false,
+                message: 'Telegram-Benachrichtigungen sind deaktiviert'
+            });
+        }
+        
+        const result = await notificationService.sendTestNotification();
+        
+        res.json({
+            success: true,
+            message: 'Test-Telegram-Nachricht gesendet',
+            result: result
+        });
+    } catch (error) {
+        res.status(500).json({ 
+            success: false, 
+            message: error.message 
+        });
+    }
 });
 
 // Erweiterte Terminsuche

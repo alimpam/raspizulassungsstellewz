@@ -182,6 +182,51 @@
                         </button>
                     </div>
                 </div>
+
+                <div class="card">
+                    <h2>📱 Telegram-Benachrichtigungen</h2>
+                    <div id="telegramStatus" class="notification-status">
+                        <div id="telegramStatusText">Lädt...</div>
+                    </div>
+                    
+                    <div style="margin: 15px 0;">
+                        <label style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                            <input type="checkbox" id="telegramEnabled" onchange="updateTelegramSettings()">
+                            <span style="font-weight: bold;">Telegram-Benachrichtigungen aktivieren</span>
+                        </label>
+                        
+                        <div id="telegramDetails" style="margin-left: 30px; font-size: 0.9em; color: #6c757d;">
+                            <!-- Wird dynamisch gefüllt -->
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button class="btn" onclick="testTelegramNotification()" id="telegramTestBtn" disabled>
+                            📱 Telegram Test
+                        </button>
+                        <button class="btn" onclick="showTelegramSetup()" style="background-color: #17a2b8;">
+                            ⚙️ Bot Setup
+                        </button>
+                    </div>
+                    
+                    <!-- Telegram Setup Modal (versteckt) -->
+                    <div id="telegramSetupModal" style="display: none; margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; border: 1px solid #dee2e6;">
+                        <h4>🤖 Telegram Bot Setup</h4>
+                        <ol style="margin: 10px 0; padding-left: 20px;">
+                            <li>Gehe zu <a href="https://t.me/BotFather" target="_blank">@BotFather</a> in Telegram</li>
+                            <li>Schreibe <code>/newbot</code> und folge den Anweisungen</li>
+                            <li>Kopiere den Bot Token</li>
+                            <li>Schreibe deinem Bot eine Nachricht</li>
+                            <li>Konfiguriere Token und Chat-ID in der .env Datei</li>
+                        </ol>
+                        <div style="margin-top: 10px;">
+                            <strong>Dein Bot:</strong> <a href="https://t.me/FreierZulassungsTerminBot" target="_blank">@FreierZulassungsTerminBot</a>
+                        </div>
+                        <button class="btn" onclick="hideTelegramSetup()" style="background-color: #6c757d; color: white; margin-top: 10px;">
+                            Schließen
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <div class="card">

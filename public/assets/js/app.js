@@ -577,9 +577,136 @@ class App {
                 
                 container.appendChild(item);
             });
+            
+            // Telegram-Status separat laden
+            await this.loadTelegramStatus();
         } catch (error) {
             console.error('Error loading notification status:', error);
         }
+    }
+
+    /**
+     * Load Telegram status and settings
+     */
+    async loadTelegramStatus() {
+        try {
+            const response = await fetch('/api/notifications/telegram');
+            const telegramConfig = await response.json();
+            
+            const statusElement = document.getElementById('telegramStatusText');
+            const enabledCheckbox = document.getElementById('telegramEnabled');
+            const detailsElement = document.getElementById('telegramDetails');
+            const testButton = document.getElementById('telegramTestBtn');
+            
+            // Update enabled state
+            enabledCheckbox.checked = telegramConfig.enabled;
+            
+            // Update status display
+            if (telegramConfig.botConfigured) {
+                if (telegramConfig.enabled) {
+                    statusElement.innerHTML = `<span style="color: #28a745;">✅ Telegram-Bot aktiv</span>`;
+                    testButton.disabled = false;
+                } else {
+                    statusElement.innerHTML = `<span style="color: #ffc107;">⚠️ Bot konfiguriert, aber deaktiviert</span>`;
+                    testButton.disabled = true;
+                }
+                
+                detailsElement.innerHTML = `
+                    <div>🤖 Bot: @FreierZulassungsTerminBot</div>
+                    <div>💬 Chat-ID: ${telegramConfig.currentChatId}</div>
+                    <div style="margin-top: 5px; font-size: 0.8em;">
+                        Nur deine Chat-ID (${telegramConfig.currentChatId}) erhält Benachrichtigungen.
+                    </div>
+                `;
+            } else {
+                statusElement.innerHTML = `<span style="color: #dc3545;">❌ Bot nicht konfiguriert</span>`;
+                testButton.disabled = true;
+                detailsElement.innerHTML = `
+                    <div style="color: #dc3545;">
+                        Bot Token oder Chat-ID fehlt in der .env Datei
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('Error loading Telegram status:', error);
+            document.getElementById('telegramStatusText').innerHTML = 
+                `<span style="color: #dc3545;">❌ Fehler beim Laden</span>`;
+        }
+    }
+
+    /**
+     * Update Telegram settings
+     */
+    async updateTelegramSettings() {
+        const enabledCheckbox = document.getElementById('telegramEnabled');
+        const enabled = enabledCheckbox.checked;
+        
+        try {
+            const response = await fetch('/api/notifications/telegram', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    enabled: enabled,
+                    onlyVerifiedChat: true
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                uiManager.showAlert(
+                    `Telegram-Benachrichtigungen ${enabled ? 'aktiviert' : 'deaktiviert'}`, 
+                    'success'
+                );
+                // Reload status to update UI
+                await this.loadTelegramStatus();
+            } else {
+                throw new Error(result.message);
+            }
+        } catch (error) {
+            console.error('Error updating Telegram settings:', error);
+            uiManager.showAlert('Fehler beim Aktualisieren der Telegram-Einstellungen', 'danger');
+            // Revert checkbox state
+            enabledCheckbox.checked = !enabled;
+        }
+    }
+
+    /**
+     * Test Telegram notification
+     */
+    async testTelegramNotification() {
+        try {
+            const response = await fetch('/api/notifications/telegram/test', {
+                method: 'POST'
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                uiManager.showAlert('Test-Telegram-Nachricht gesendet! 📱', 'success');
+            } else {
+                throw new Error(result.message);
+            }
+        } catch (error) {
+            console.error('Error testing Telegram notification:', error);
+            uiManager.showAlert('Fehler beim Senden der Test-Nachricht', 'danger');
+        }
+    }
+
+    /**
+     * Show Telegram setup modal
+     */
+    showTelegramSetup() {
+        document.getElementById('telegramSetupModal').style.display = 'block';
+    }
+
+    /**
+     * Hide Telegram setup modal
+     */
+    hideTelegramSetup() {
+        document.getElementById('telegramSetupModal').style.display = 'none';
     }
 
     /**
@@ -965,6 +1092,12 @@ window.testAppointmentEvent = () => appointmentEventManager.testAppointmentEvent
 window.playNotificationSequence = () => audioManager.playNotificationSequence();
 window.createFallbackBeep = () => audioManager.createFallbackBeep();
 window.debugAllEndpoints = () => app.debugAllEndpoints();
+
+// Telegram function exports
+window.updateTelegramSettings = () => app.updateTelegramSettings();
+window.testTelegramNotification = () => app.testTelegramNotification();
+window.showTelegramSetup = () => app.showTelegramSetup();
+window.hideTelegramSetup = () => app.hideTelegramSetup();
 
 // Universal date picker function for all platforms
 window.openDatePicker = () => {
